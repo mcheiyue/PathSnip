@@ -45,6 +45,5 @@ jobs:
         
         gh release create $tag --title $tag --notes "$body"
         
-        # Upload single exe
+        # Upload single exe (由 Costura.Fody 合并)
         gh release upload $tag src/PathSnip/bin/Release/net48/PathSnip.exe --clobber
-        gh release upload $tag src/PathSnip/bin/Release/net48/PathSnip.exe.config --clobber
