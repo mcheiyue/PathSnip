@@ -1,0 +1,28 @@
+<Window x:Class="PathSnip.MainWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:tb="http://www.hardcodet.net/taskbar"
+        Title="PathSnip"
+        Width="0" Height="0"
+        WindowStyle="None"
+        ShowInTaskbar="False"
+        Visibility="Hidden">
+    <Window.Resources>
+        <ContextMenu x:Key="TrayMenu">
+            <MenuItem x:Name="CaptureMenuItem" Header="截图" Click="MenuItem_Capture_Click" />
+            <MenuItem Header="打开保存目录" Click="MenuItem_OpenFolder_Click" />
+            <MenuItem Header="设置" Click="MenuItem_Settings_Click" />
+            <Separator />
+            <MenuItem Header="退出" Click="MenuItem_Exit_Click" />
+        </ContextMenu>
+    </Window.Resources>
+    
+    <Grid>
+        <!-- 托盘图标 -->
+        <tb:TaskbarIcon x:Name="TrayIcon"
+                        IconSource="/PathSnip.ico"
+                        ToolTipText="PathSnip - 截图工具"
+                        ContextMenu="{StaticResource TrayMenu}"
+                        TrayMouseDoubleClick="TrayIcon_TrayMouseDoubleClick" />
+    </Grid>
+</Window>

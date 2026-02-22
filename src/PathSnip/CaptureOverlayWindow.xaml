@@ -1,0 +1,48 @@
+<Window x:Class="PathSnip.CaptureOverlayWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        WindowStyle="None"
+        AllowsTransparency="True"
+        Background="Transparent"
+        Topmost="True"
+        ShowInTaskbar="False"
+        Cursor="Cross"
+        KeyDown="Window_KeyDown">
+    <Grid>
+        <!-- 半透明遮罩 -->
+        <Rectangle x:Name="Overlay" Fill="#40000000" />
+        
+        <!-- 选区边框 -->
+        <Canvas x:Name="SelectionCanvas">
+            <!-- 选区矩形 -->
+            <Rectangle x:Name="SelectionRect"
+                       Stroke="#0078D4"
+                       StrokeThickness="2"
+                       Fill="#200078D4"
+                       Visibility="Collapsed" />
+            
+            <!-- 尺寸标注 -->
+            <Border x:Name="SizeLabel"
+                    Background="#CC000000"
+                    CornerRadius="2"
+                    Padding="6,2"
+                    Visibility="Collapsed">
+                <TextBlock x:Name="SizeText"
+                           Foreground="White"
+                           FontSize="12"
+                           FontFamily="Segoe UI" />
+            </Border>
+        </Canvas>
+        
+        <!-- 提示文字 -->
+        <TextBlock x:Name="HintText"
+                   Text="拖拽选择区域，右键或 ESC 取消"
+                   Foreground="White"
+                   FontSize="14"
+                   FontFamily="Segoe UI"
+                   HorizontalAlignment="Center"
+                   VerticalAlignment="Top"
+                   Margin="0,50,0,0"
+                   Opacity="0.8" />
+    </Grid>
+</Window>
