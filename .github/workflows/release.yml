@@ -20,6 +20,9 @@ jobs:
       with:
         dotnet-version: '8.0.x'
     
+    - name: Install ILRepack
+      run: dotnet tool install --global ILRepack --version 2.4.1
+    
     - name: Restore
       run: dotnet restore src/PathSnip/PathSnip.csproj
     
@@ -28,6 +31,32 @@ jobs:
     
     - name: Publish
       run: dotnet publish src/PathSnip/PathSnip.csproj -c Release -r win-x64 --self-contained false -o ./publish
+    
+    - name: Merge DLLs
+      run: |
+        $exe = "publish\PathSnip.exe"
+        $dlls = @(
+          "publish\Hardcodet.NotifyIcon.Wpf.dll",
+          "publish\Newtonsoft.Json.dll"
+        )
+        
+        # 复制到临时目录合并
+        $tempDir = "publish-temp"
+        New-Item -ItemType Directory -Force -Path $tempDir | Out-Null
+        
+        Copy-Item $exe $tempDir\
+        foreach ($dll in $dlls) {
+          if (Test-Path $dll) {
+            Copy-Item $dll $tempDir\
+          }
+        }
+        
+        # 合并
+        $ilRepack = "$env:LOCALAPPDATA\.dotnet\tools\ilrepack.exe"
+        & $ilRepack -out publish\PathSnip.exe $tempDir\PathSnip.exe $tempDir\Hardcodet.NotifyIcon.Wpf.dll $tempDir\Newtonsoft.Json.dll
+        
+        # 清理
+        Remove-Item -Recurse -Force $tempDir
     
     - name: Create Release
       env:
@@ -40,7 +69,5 @@ jobs:
         # Create release
         gh release create $tag --title $tag --notes "$body"
         
-        # Upload assets
-        Get-ChildItem publish/* | ForEach-Object {
-          gh release upload $tag $_.FullName --clobber
-        }
+        # Upload single exe
+        gh release upload $tag publish/PathSnip.exe --clobber
