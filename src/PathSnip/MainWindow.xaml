@@ -20,7 +20,7 @@
     <Grid>
         <!-- 托盘图标 -->
         <tb:TaskbarIcon x:Name="TrayIcon"
-                        IconSource="/PathSnip.ico"
+                        IconSource="Resources/PathSnip.ico"
                         ToolTipText="PathSnip - 截图工具"
                         ContextMenu="{StaticResource TrayMenu}"
                         TrayMouseDoubleClick="TrayIcon_TrayMouseDoubleClick" />
