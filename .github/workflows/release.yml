@@ -29,36 +29,6 @@ jobs:
     - name: Publish
       run: dotnet publish src/PathSnip/PathSnip.csproj -c Release -r win-x64 --self-contained false -o ./publish
     
-    - name: Merge to Single File
-      run: |
-        # 使用 PowerShell 合并 IL
-        $exe = "publish\PathSnip.exe"
-        $outputExe = "publish\PathSnip-Single.exe"
-        
-        # 读取 EXE 和 DLL
-        $exeBytes = [System.IO.File]::ReadAllBytes($exe)
-        $ilMergePath = "publish\ILMerge"
-        New-Item -ItemType Directory -Force -Path $ilMergePath | Out-Null
-        
-        # 复制所有文件
-        Copy-Item $exe "$ilMergePath\"
-        Copy-Item "publish\Hardcodet.NotifyIcon.Wpf.dll" "$ilMergePath\" -ErrorAction SilentlyContinue
-        Copy-Item "publish\Newtonsoft.Json.dll" "$ilMergePath\" -ErrorAction SilentlyContinue
-        
-        # 下载 ILMerge
-        $ilMergeUrl = "https://github.com/mono/ilmerge/releases/download/3.0.29/ILMerge-3.0.29.zip"
-        Invoke-WebRequest -Uri $ilMergeUrl -OutFile "ilmerge.zip"
-        Expand-Archive -Path "ilmerge.zip" -DestinationPath "ilmerge-temp" -Force
-        
-        # 合并
-        & "ilmerge-temp\ILMerge.exe" /out:$outputExe $exe "publish\Hardcodet.NotifyIcon.Wpf.dll" "publish\Newtonsoft.Json.dll" /targetplatform:v4
-        
-        # 替换原文件
-        Move-Item $outputExe $exe -Force
-        
-        # 清理
-        Remove-Item -Recurse -Force $ilMergePath, ilmerge.zip, ilmerge-temp -ErrorAction SilentlyContinue
-    
     - name: Create Release
       env:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -67,8 +37,9 @@ jobs:
         $body = Get-Content -Path RELEASE_TEMPLATE.md -Raw -ErrorAction SilentlyContinue
         if (-not $body) { $body = "Release $tag" }
         
-        # Create release
         gh release create $tag --title $tag --notes "$body"
         
-        # Upload single exe
-        gh release upload $tag publish/PathSnip.exe --clobber
+        # Upload all files
+        Get-ChildItem publish/* | ForEach-Object {
+          gh release upload $tag $_.FullName --clobber
+        }
