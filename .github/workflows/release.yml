@@ -31,15 +31,17 @@ jobs:
       run: echo "VERSION=${GITHUB_REF#refs/tags/}" >> $GITHUB_OUTPUT
     
     - name: Create Release
-      uses: softprops/action-gh-release@v2
-      with:
-        tag_name: ${{ steps.version.outputs.VERSION }}
-        name: ${{ steps.version.outputs.VERSION }}
-        body_path: RELEASE_TEMPLATE.md
-        files: |
-          publish/PathSnip.exe
-          publish/PathSnip.exe.config
-          publish/Hardcodet.NotifyIcon.Wpf.dll
-          publish/Newtonsoft.Json.dll
       env:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      run: |
+        $tag = "${{ steps.version.outputs.VERSION }}"
+        $body = Get-Content -Path RELEASE_TEMPLATE.md -Raw -ErrorAction SilentlyContinue
+        if (-not $body) { $body = "Release $tag" }
+        
+        # Create release
+        gh release create "$tag" --title "$tag" --notes "$body"
+        
+        # Upload assets
+        Get-ChildItem publish/* | ForEach-Object {
+          gh release upload "$tag" $_.FullName --clobber
+        }
