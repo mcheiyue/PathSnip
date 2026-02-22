@@ -26,9 +26,6 @@ jobs:
     - name: Build
       run: dotnet build src/PathSnip/PathSnip.csproj -c Release --no-restore
     
-    - name: Publish
-      run: dotnet publish src/PathSnip/PathSnip.csproj -c Release -r win-x64 --self-contained false -o ./publish
-    
     - name: Create Release
       env:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -39,7 +36,6 @@ jobs:
         
         gh release create $tag --title $tag --notes "$body"
         
-        # Upload all files
-        Get-ChildItem publish/* | ForEach-Object {
-          gh release upload $tag $_.FullName --clobber
-        }
+        # Upload single exe (已由 Costura.Fody 合并)
+        gh release upload $tag src/PathSnip/bin/Release/net48/PathSnip.exe --clobber
+        gh release upload $tag src/PathSnip/bin/Release/net48/PathSnip.exe.config --clobber
