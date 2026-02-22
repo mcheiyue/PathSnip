@@ -31,11 +31,20 @@ jobs:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       run: |
         $tag = "${{ github.ref_name }}"
-        $body = Get-Content -Path RELEASE_TEMPLATE.md -Raw -ErrorAction SilentlyContinue
-        if (-not $body) { $body = "Release $tag" }
+        
+        # 读取 CHANGELOG.md
+        $content = Get-Content CHANGELOG.md -Raw
+        
+        # 提取对应版本的内容
+        $pattern = "(?s)## \[$tag\](.*?)(?=## \[v|$)"
+        if ($content -match $pattern) {
+          $body = $matches[1].Trim()
+        } else {
+          $body = "Release $tag"
+        }
         
         gh release create $tag --title $tag --notes "$body"
         
-        # Upload single exe (已由 Costura.Fody 合并)
+        # Upload single exe
         gh release upload $tag src/PathSnip/bin/Release/net48/PathSnip.exe --clobber
         gh release upload $tag src/PathSnip/bin/Release/net48/PathSnip.exe.config --clobber
