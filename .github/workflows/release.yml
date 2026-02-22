@@ -20,9 +20,6 @@ jobs:
       with:
         dotnet-version: '8.0.x'
     
-    - name: Install ILRepack
-      run: dotnet tool install --global ILRepack --version 2.4.1
-    
     - name: Restore
       run: dotnet restore src/PathSnip/PathSnip.csproj
     
@@ -32,31 +29,35 @@ jobs:
     - name: Publish
       run: dotnet publish src/PathSnip/PathSnip.csproj -c Release -r win-x64 --self-contained false -o ./publish
     
-    - name: Merge DLLs
+    - name: Merge to Single File
       run: |
+        # 使用 PowerShell 合并 IL
         $exe = "publish\PathSnip.exe"
-        $dlls = @(
-          "publish\Hardcodet.NotifyIcon.Wpf.dll",
-          "publish\Newtonsoft.Json.dll"
-        )
+        $outputExe = "publish\PathSnip-Single.exe"
         
-        # 复制到临时目录合并
-        $tempDir = "publish-temp"
-        New-Item -ItemType Directory -Force -Path $tempDir | Out-Null
+        # 读取 EXE 和 DLL
+        $exeBytes = [System.IO.File]::ReadAllBytes($exe)
+        $ilMergePath = "publish\ILMerge"
+        New-Item -ItemType Directory -Force -Path $ilMergePath | Out-Null
         
-        Copy-Item $exe $tempDir\
-        foreach ($dll in $dlls) {
-          if (Test-Path $dll) {
-            Copy-Item $dll $tempDir\
-          }
-        }
+        # 复制所有文件
+        Copy-Item $exe "$ilMergePath\"
+        Copy-Item "publish\Hardcodet.NotifyIcon.Wpf.dll" "$ilMergePath\" -ErrorAction SilentlyContinue
+        Copy-Item "publish\Newtonsoft.Json.dll" "$ilMergePath\" -ErrorAction SilentlyContinue
+        
+        # 下载 ILMerge
+        $ilMergeUrl = "https://github.com/mono/ilmerge/releases/download/3.0.29/ILMerge-3.0.29.zip"
+        Invoke-WebRequest -Uri $ilMergeUrl -OutFile "ilmerge.zip"
+        Expand-Archive -Path "ilmerge.zip" -DestinationPath "ilmerge-temp" -Force
         
         # 合并
-        $ilRepack = "$env:LOCALAPPDATA\.dotnet\tools\ilrepack.exe"
-        & $ilRepack -out publish\PathSnip.exe $tempDir\PathSnip.exe $tempDir\Hardcodet.NotifyIcon.Wpf.dll $tempDir\Newtonsoft.Json.dll
+        & "ilmerge-temp\ILMerge.exe" /out:$outputExe $exe "publish\Hardcodet.NotifyIcon.Wpf.dll" "publish\Newtonsoft.Json.dll" /targetplatform:v4
+        
+        # 替换原文件
+        Move-Item $outputExe $exe -Force
         
         # 清理
-        Remove-Item -Recurse -Force $tempDir
+        Remove-Item -Recurse -Force $ilMergePath, ilmerge.zip, ilmerge-temp -ErrorAction SilentlyContinue
     
     - name: Create Release
       env:
