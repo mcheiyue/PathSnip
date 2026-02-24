@@ -5,6 +5,23 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/zh-CN/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/lang/zh-CN/).
 
+## [v1.0.2] - 2026-02-24
+
+### ✨ 新特性 (Features)
+*   新增气泡属性栏：选中矩形/箭头工具时弹出二级菜单
+*   新增颜色选择：蓝色、红色、黑色三种颜色
+*   新增线条粗细：细(1px)、中(2px)、粗(4px)三种粗细
+*   新增每个工具独立的属性设置：矩形和箭头的颜色/粗细分开存储
+
+### 🐛 问题修复 (Bug Fixes)
+*   修复工具栏位置边界计算问题
+*   修复切换工具时属性栏不显示的问题
+*   修复颜色图标显示空白的问题
+
+### 🚀 优化 (Optimizations)
+*   优化属性栏UI设计，采用圆点图标表示粗细
+*   优化属性栏对齐到选中工具
+
 ## [v1.0.1] - 2026-02-24
 
 ### ✨ 新特性 (Features)
