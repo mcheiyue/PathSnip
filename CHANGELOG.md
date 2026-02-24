@@ -5,6 +5,27 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/zh-CN/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/lang/zh-CN/).
 
+## [v1.0.1] - 2026-02-24
+
+### ✨ 新特性 (Features)
+*   新增框选标注功能：支持矩形、箭头、文字三种标注工具
+*   新增浮动工具栏：选区完成后显示工具栏，支持撤销操作
+*   新增挖孔效果：选区高亮显示，外部半透明遮罩
+
+### 🐛 问题修复 (Bug Fixes)
+*   修复截图窗口无法多次触发的问题
+*   修复热键回调导致的跨线程异常
+*   修复选区白色遮罩显示异常问题
+*   修复标注工具无法点击的问题
+*   修复标注溢出选区边界的问题
+*   修复工具切换后事件未清除的问题
+*   修复保存图片包含蓝色边框的问题
+
+### 🚀 优化 (Optimizations)
+*   重构截图保存逻辑，使用背景图直接裁剪
+*   优化工具栏UI设计，采用蓝色主题风格
+*   添加标注渲染到图片功能
+
 ## [v1.0.0] - 2026-02-22
 
 ### ✨ 新特性 (Features)
