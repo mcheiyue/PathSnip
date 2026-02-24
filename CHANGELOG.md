@@ -5,6 +5,17 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/zh-CN/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/lang/zh-CN/).
 
+## [v1.0.3] - 2026-02-25
+
+### 🐛 问题修复 (Bug Fixes)
+*   修复托盘模式下主窗口"幽灵窗口"显示问题
+*   修复高 DPI 屏幕下截图模糊/被裁切的问题
+*   修复文字工具输入时光标被截图的问题
+*   修复空白文字框污染撤销栈导致需连点撤销的问题
+
+### 🚀 优化 (Optimizations)
+*   优化文字工具支持连续标注，行为与矩形/箭头一致
+
 ## [v1.0.2] - 2026-02-24
 
 ### ✨ 新特性 (Features)

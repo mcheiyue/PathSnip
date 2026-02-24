@@ -64,8 +64,18 @@ namespace PathSnip
 
         private void OnHotkeyPressed()
         {
-            // 触发截图
-            _mainWindow.StartCapture();
+            // 通过Dispatcher调用，确保在UI线程执行
+            Application.Current.Dispatcher.BeginInvoke(new Action(() =>
+            {
+                try
+                {
+                    _mainWindow.StartCapture();
+                }
+                catch (Exception ex)
+                {
+                    LogService.Log($"热键触发失败: {ex.Message}");
+                }
+            }), System.Windows.Threading.DispatcherPriority.Send);
         }
 
         protected override void OnExit(ExitEventArgs e)

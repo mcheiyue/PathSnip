@@ -11,6 +11,7 @@ namespace PathSnip
     {
         private CaptureOverlayWindow _captureWindow;
         private HotkeyService _hotkeyService;
+        private bool _isCapturing;
 
         public MainWindow()
         {
@@ -19,14 +20,51 @@ namespace PathSnip
 
         public void StartCapture()
         {
-            // 隐藏主窗口（如果显示了）
-            this.Hide();
+            // 防止重复触发
+            if (_isCapturing) return;
+            _isCapturing = true;
 
-            // 创建并显示框选窗口
-            _captureWindow = new CaptureOverlayWindow();
-            _captureWindow.CaptureCompleted += OnCaptureCompleted;
-            _captureWindow.CaptureCancelled += OnCaptureCancelled;
-            _captureWindow.Show();
+            try
+            {
+                // 隐藏主窗口
+                this.Hide();
+
+                // 使用 Send 优先级确保立即执行
+                Dispatcher.BeginInvoke(new Action(() =>
+                {
+                    try
+                    {
+                        // 先截取屏幕作为背景
+                        var bounds = ScreenCaptureService.GetVirtualScreenBounds();
+                        System.Windows.Media.Imaging.BitmapSource background = null;
+                        try
+                        {
+                            background = ScreenCaptureService.Capture(bounds);
+                        }
+                        catch (Exception ex)
+                        {
+                            LogService.Log($"截取背景失败: {ex.Message}");
+                        }
+
+                        // 创建并显示框选窗口，传入背景图
+                        _captureWindow = new CaptureOverlayWindow(background);
+                        _captureWindow.CaptureCompleted += OnCaptureCompleted;
+                        _captureWindow.CaptureCompletedWithImage += OnCaptureCompletedWithImage;
+                        _captureWindow.CaptureCancelled += OnCaptureCancelled;
+                        _captureWindow.Show();
+                    }
+                    catch (Exception ex)
+                    {
+                        LogService.Log($"创建截图窗口失败: {ex.Message}");
+                        _isCapturing = false;
+                    }
+                }), System.Windows.Threading.DispatcherPriority.Send);
+            }
+            catch (Exception ex)
+            {
+                LogService.Log($"StartCapture失败: {ex.Message}");
+                _isCapturing = false;
+            }
         }
 
         public void UpdateHotkey(string modifiersStr, string keyStr)
@@ -102,9 +140,6 @@ namespace PathSnip
                 if (_captureWindow != null)
                 {
                     _captureWindow.Visibility = Visibility.Hidden;
-                    
-                    // 强制立即渲染，确保窗口完全隐藏后再截图
-                    _captureWindow.Dispatcher.Invoke(() => { }, System.Windows.Threading.DispatcherPriority.Render);
                 }
 
                 // 执行截图
@@ -131,16 +166,61 @@ namespace PathSnip
             }
             finally
             {
-                _captureWindow?.Close();
-                _captureWindow = null;
+                Dispatcher.BeginInvoke(new Action(() =>
+                {
+                    _captureWindow?.Close();
+                    _captureWindow = null;
+                    _isCapturing = false;  // 重置状态
+                    // 不恢复主窗口，保持托盘隐藏
+                }));
+            }
+        }
+
+        private void OnCaptureCompletedWithImage(System.Windows.Media.Imaging.BitmapSource bitmap)
+        {
+            try
+            {
+                // 保存文件并获取路径
+                var filePath = FileService.Save(bitmap);
+
+                // 复制路径到剪贴板
+                ClipboardService.SetText(filePath);
+
+                // 根据配置决定是否显示通知
+                if (ConfigService.Instance.ShowNotification)
+                {
+                    TrayIcon.ShowBalloonTip("PathSnip", $"已保存并复制路径", Hardcodet.Wpf.TaskbarNotification.BalloonIcon.Info);
+                }
+
+                LogService.Log($"截图成功: {filePath}");
+            }
+            catch (Exception ex)
+            {
+                LogService.Log($"截图失败: {ex.Message}");
+                TrayIcon.ShowBalloonTip("PathSnip", $"截图失败: {ex.Message}", Hardcodet.Wpf.TaskbarNotification.BalloonIcon.Error);
+            }
+            finally
+            {
+                Dispatcher.BeginInvoke(new Action(() =>
+                {
+                    _captureWindow?.Close();
+                    _captureWindow = null;
+                    _isCapturing = false;  // 重置状态
+                    // 不恢复主窗口，保持托盘隐藏
+                }));
             }
         }
 
         private void OnCaptureCancelled()
         {
-            _captureWindow?.Close();
-            _captureWindow = null;
-            LogService.Log("截图已取消");
+            Dispatcher.BeginInvoke(new Action(() =>
+            {
+                _captureWindow?.Close();
+                _captureWindow = null;
+                _isCapturing = false;  // 重置状态
+                // 不恢复主窗口，保持托盘隐藏
+                LogService.Log("截图已取消");
+            }));
         }
 
         private void MenuItem_Capture_Click(object sender, RoutedEventArgs e)

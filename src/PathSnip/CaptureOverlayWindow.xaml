@@ -3,22 +3,205 @@
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         WindowStyle="None"
         AllowsTransparency="True"
-        Background="Transparent"
+        Background="#00000000"
         Topmost="True"
         ShowInTaskbar="False"
+        ResizeMode="NoResize"
+        WindowState="Maximized"
         Cursor="Cross"
         KeyDown="Window_KeyDown">
-    <Grid>
-        <!-- 半透明遮罩 -->
-        <Rectangle x:Name="Overlay" Fill="#40000000" />
+    
+    <Window.Resources>
+        <!-- 工具单选按钮样式 -->
+        <Style x:Key="ToolRadioButtonStyle" TargetType="RadioButton">
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="RadioButton">
+                        <Border x:Name="border" Background="Transparent" CornerRadius="4" 
+                                Width="28" Height="28" Margin="2" Cursor="Hand">
+                            <TextBlock x:Name="icon" Text="{TemplateBinding Content}"
+                                       FontFamily="Segoe MDL2 Assets" FontSize="14"
+                                       Foreground="#666666" HorizontalAlignment="Center" VerticalAlignment="Center" />
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter TargetName="border" Property="Background" Value="#F0F0F0" />
+                            </Trigger>
+                            <Trigger Property="IsChecked" Value="True">
+                                <Setter TargetName="border" Property="Background" Value="#E6F2FB" />
+                                <Setter TargetName="icon" Property="Foreground" Value="#0078D4" />
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
         
-        <!-- 选区边框 -->
+        <!-- 普通按钮样式 -->
+        <Style x:Key="ToolButtonStyle" TargetType="Button">
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="Button">
+                        <Border x:Name="border" Background="Transparent" CornerRadius="4"
+                                Width="28" Height="28" Margin="2" Cursor="Hand">
+                            <TextBlock Text="{TemplateBinding Content}"
+                                       FontFamily="Segoe MDL2 Assets" FontSize="14"
+                                       Foreground="#666666" HorizontalAlignment="Center" VerticalAlignment="Center" />
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter TargetName="border" Property="Background" Value="#F0F0F0" />
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+        
+        <!-- 成功按钮样式 -->
+        <Style x:Key="ToolButtonStyleSuccess" TargetType="Button">
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="Button">
+                        <Border x:Name="border" Background="Transparent" CornerRadius="4"
+                                Width="28" Height="28" Margin="2" Cursor="Hand">
+                            <TextBlock Text="{TemplateBinding Content}"
+                                       FontFamily="Segoe MDL2 Assets" FontSize="14"
+                                       Foreground="#28A745" HorizontalAlignment="Center" VerticalAlignment="Center" />
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter TargetName="border" Property="Background" Value="#E8F5E9" />
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+        
+        <!-- 危险按钮样式 -->
+        <Style x:Key="ToolButtonStyleDanger" TargetType="Button">
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="Button">
+                        <Border x:Name="border" Background="Transparent" CornerRadius="4"
+                                Width="28" Height="28" Margin="2" Cursor="Hand">
+                            <TextBlock Text="{TemplateBinding Content}"
+                                       FontFamily="Segoe MDL2 Assets" FontSize="14"
+                                       Foreground="#DC3545" HorizontalAlignment="Center" VerticalAlignment="Center" />
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter TargetName="border" Property="Background" Value="#FFEBEE" />
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+        
+        <!-- 颜色按钮样式 -->
+        <Style x:Key="ColorButtonStyle" TargetType="Button">
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="Button">
+                        <Border x:Name="border" Background="{TemplateBinding Background}" CornerRadius="3"
+                                Width="20" Height="20" Margin="2" Cursor="Hand" BorderThickness="2" BorderBrush="Transparent" />
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter TargetName="border" Property="BorderBrush" Value="#0078D4" />
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+        
+        <!-- 粗细按钮样式 -->
+        <Style x:Key="ThicknessButtonStyle" TargetType="Button">
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="Button">
+                        <Border x:Name="border" Background="Transparent" CornerRadius="3"
+                                Width="28" Height="20" Margin="2" Cursor="Hand" />
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter TargetName="border" Property="Background" Value="#F0F0F0" />
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+        
+        <!-- 颜色单选按钮样式 -->
+        <Style x:Key="ColorRadioStyle" TargetType="RadioButton">
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="RadioButton">
+                        <Border x:Name="border" CornerRadius="3"
+                                Width="22" Height="22" Margin="2" Cursor="Hand" BorderThickness="2" BorderBrush="Transparent">
+                            <Ellipse x:Name="colorCircle" Width="14" Height="14" 
+                                     Fill="{Binding Background, RelativeSource={RelativeSource TemplatedParent}}" />
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter TargetName="border" Property="BorderBrush" Value="#0078D4" />
+                            </Trigger>
+                            <Trigger Property="IsChecked" Value="True">
+                                <Setter TargetName="border" Property="BorderBrush" Value="#0078D4" />
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+        
+        <!-- 粗细单选按钮样式 -->
+        <Style x:Key="ThicknessRadioStyle" TargetType="RadioButton">
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="RadioButton">
+                        <Border x:Name="border" Background="Transparent" CornerRadius="3"
+                                Width="26" Height="22" Margin="2" Cursor="Hand">
+                            <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center" />
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter TargetName="border" Property="Background" Value="#E6F2FB" />
+                            </Trigger>
+                            <Trigger Property="IsChecked" Value="True">
+                                <Setter TargetName="border" Property="Background" Value="#E6F2FB" />
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+    </Window.Resources>
+    
+    <!-- 使用 Canvas 以支持绝对定位 -->
+    <Canvas>
+        <!-- 背景截图 -->
+        <Image x:Name="BackgroundImage" Stretch="None" />
+        
+        <!-- 外部遮罩（选区外覆盖，挖孔效果） -->
+        <Path x:Name="OuterMask" Fill="#40000000" Visibility="Collapsed">
+            <Path.Data>
+                <GeometryGroup FillRule="EvenOdd">
+                    <RectangleGeometry x:Name="FullScreenGeometry" Rect="0,0,10000,10000" />
+                    <RectangleGeometry x:Name="HoleGeometry" Rect="0,0,0,0" />
+                </GeometryGroup>
+            </Path.Data>
+        </Path>
+        
+        <!-- 选区画布 -->
         <Canvas x:Name="SelectionCanvas">
-            <!-- 选区矩形 -->
+            <!-- 选区边框 -->
             <Rectangle x:Name="SelectionRect"
                        Stroke="#0078D4"
                        StrokeThickness="2"
-                       Fill="#200078D4"
+                       Fill="Transparent"
                        Visibility="Collapsed" />
             
             <!-- 尺寸标注 -->
@@ -34,15 +217,91 @@
             </Border>
         </Canvas>
         
+        <!-- 标注画布 - 需要透明背景才能接收鼠标事件，且限制子元素在边界内 -->
+        <Canvas x:Name="AnnotationCanvas" Background="Transparent" Visibility="Collapsed" ClipToBounds="True" />
+        
+        <!-- 浮动工具栏 -->
+        <Border x:Name="Toolbar"
+                Background="White"
+                CornerRadius="6"
+                Padding="6"
+                Visibility="Collapsed">
+            <Border.Effect>
+                <DropShadowEffect BlurRadius="8" ShadowDepth="1" Opacity="0.2" />
+            </Border.Effect>
+            <StackPanel Orientation="Horizontal">
+                <!-- 标注工具 -->
+                <RadioButton x:Name="RectToolBtn" GroupName="Tools" Style="{StaticResource ToolRadioButtonStyle}" 
+                             Content="&#xE739;" ToolTip="矩形标注" Checked="Tool_Checked" Unchecked="Tool_Unchecked" Tag="Rectangle" />
+                <RadioButton x:Name="ArrowToolBtn" GroupName="Tools" Style="{StaticResource ToolRadioButtonStyle}"
+                             Content="&#xE72A;" ToolTip="箭头标注" Checked="Tool_Checked" Unchecked="Tool_Unchecked" Tag="Arrow" />
+                <RadioButton x:Name="TextToolBtn" GroupName="Tools" Style="{StaticResource ToolRadioButtonStyle}"
+                             Content="&#xE70F;" ToolTip="文字标注" Checked="Tool_Checked" Unchecked="Tool_Unchecked" Tag="Text" />
+                
+                <!-- 分隔线 -->
+                <Rectangle Width="1" Fill="#E0E0E0" Margin="6,4" />
+                
+                <!-- 操作按钮 -->
+                <Button x:Name="UndoBtn" Style="{StaticResource ToolButtonStyle}" 
+                        Content="&#xE7A7;" ToolTip="撤销" Click="UndoBtn_Click" />
+                <Button x:Name="SaveBtn" Style="{StaticResource ToolButtonStyleSuccess}" 
+                        Content="&#xE73E;" ToolTip="确认保存" Click="SaveBtn_Click" />
+                <Button x:Name="CancelBtn" Style="{StaticResource ToolButtonStyleDanger}" 
+                        Content="&#xE711;" ToolTip="取消" Click="CancelBtn_Click" />
+            </StackPanel>
+        </Border>
+        
+        <!-- 气泡属性栏（二级菜单）- 使用Popup实现真正的气泡弹出 -->
+        <Popup x:Name="PropertyPopup" StaysOpen="True" Placement="Top" AllowsTransparency="True">
+            <Border x:Name="PropertyPanel"
+                    Background="White"
+                    CornerRadius="6"
+                    Padding="8,6"
+                    Margin="10,0,0,0">
+                <Border.Effect>
+                    <DropShadowEffect BlurRadius="10" ShadowDepth="3" Opacity="0.3" Color="#000000" />
+                </Border.Effect>
+                <StackPanel>
+                    <!-- 颜色选择 -->
+                    <StackPanel Orientation="Horizontal" Margin="0,0,0,6" HorizontalAlignment="Center">
+                        <RadioButton x:Name="ColorBlue" GroupName="Color" Style="{StaticResource ColorRadioStyle}" 
+                                     Background="#0078D4" Tag="#0078D4" Checked="ColorBtn_Click" ToolTip="蓝色" />
+                        <RadioButton x:Name="ColorRed" GroupName="Color" Style="{StaticResource ColorRadioStyle}" 
+                                     Background="#DC3545" Tag="#DC3545" Checked="ColorBtn_Click" ToolTip="红色" />
+                        <RadioButton x:Name="ColorBlack" GroupName="Color" Style="{StaticResource ColorRadioStyle}" 
+                                     Background="#333333" Tag="#333333" Checked="ColorBtn_Click" ToolTip="黑色" />
+                    </StackPanel>
+                    <!-- 粗细选择 -->
+                    <StackPanel Orientation="Horizontal" HorizontalAlignment="Center">
+                        <RadioButton x:Name="ThicknessThin" GroupName="Thickness" Style="{StaticResource ThicknessRadioStyle}" 
+                                     Tag="Thin" Checked="ThicknessBtn_Click" ToolTip="细">
+                            <Ellipse Width="4" Height="4" Fill="#333333" />
+                        </RadioButton>
+                        <RadioButton x:Name="ThicknessMedium" GroupName="Thickness" Style="{StaticResource ThicknessRadioStyle}" 
+                                     Tag="Medium" Checked="ThicknessBtn_Click" ToolTip="中">
+                            <Ellipse Width="8" Height="8" Fill="#333333" />
+                        </RadioButton>
+                        <RadioButton x:Name="ThicknessThick" GroupName="Thickness" Style="{StaticResource ThicknessRadioStyle}" 
+                                     Tag="Thick" Checked="ThicknessBtn_Click" ToolTip="粗">
+                            <Ellipse Width="12" Height="12" Fill="#333333" />
+                        </RadioButton>
+                    </StackPanel>
+                </StackPanel>
+            </Border>
+        </Popup>
+        
         <!-- 提示文字 -->
         <TextBlock x:Name="HintText"
                    Text="拖拽选择区域，右键或 ESC 取消"
                    Foreground="White"
                    FontSize="14"
                    FontFamily="Segoe UI"
-                   HorizontalAlignment="Center"
-                   VerticalAlignment="Top"
-                   Margin="0,50,0,0"
-                   Opacity="0.8" />
-    </Grid>
+                   Canvas.Left="50"
+                   Canvas.Top="50"
+                   Opacity="0.8">
+            <TextBlock.Effect>
+                <DropShadowEffect BlurRadius="4" ShadowDepth="1" Opacity="0.5" />
+            </TextBlock.Effect>
+        </TextBlock>
+    </Canvas>
 </Window>
