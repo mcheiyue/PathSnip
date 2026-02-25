@@ -32,6 +32,34 @@ namespace PathSnip
 
             // 通知
             ShowNotificationCheckBox.IsChecked = config.ShowNotification;
+
+            // 剪贴板模式
+            switch (config.ClipboardMode)
+            {
+                case ClipboardMode.ImageOnly:
+                    ClipboardModeComboBox.SelectedIndex = 1;
+                    break;
+                case ClipboardMode.ImageAndPath:
+                    ClipboardModeComboBox.SelectedIndex = 2;
+                    break;
+                default:
+                    ClipboardModeComboBox.SelectedIndex = 0;
+                    break;
+            }
+
+            // 路径格式
+            switch (config.PathFormat)
+            {
+                case "Markdown":
+                    PathFormatComboBox.SelectedIndex = 1;
+                    break;
+                case "HTML":
+                    PathFormatComboBox.SelectedIndex = 2;
+                    break;
+                default:
+                    PathFormatComboBox.SelectedIndex = 0;
+                    break;
+            }
         }
 
         private void HotkeyTextBox_PreviewKeyDown(object sender, System.Windows.Input.KeyEventArgs e)
@@ -158,6 +186,25 @@ namespace PathSnip
 
                 // 保存通知设置
                 config.ShowNotification = ShowNotificationCheckBox.IsChecked == true;
+
+                // 保存剪贴板模式
+                var clipboardModeTag = (ClipboardModeComboBox.SelectedItem as System.Windows.Controls.ComboBoxItem).Tag.ToString();
+                switch (clipboardModeTag)
+                {
+                    case "ImageOnly":
+                        config.ClipboardMode = ClipboardMode.ImageOnly;
+                        break;
+                    case "ImageAndPath":
+                        config.ClipboardMode = ClipboardMode.ImageAndPath;
+                        break;
+                    default:
+                        config.ClipboardMode = ClipboardMode.PathOnly;
+                        break;
+                }
+
+                // 保存路径格式
+                var pathFormatTag = (PathFormatComboBox.SelectedItem as System.Windows.Controls.ComboBoxItem).Tag.ToString();
+                config.PathFormat = pathFormatTag;
 
                 config.Save();
 

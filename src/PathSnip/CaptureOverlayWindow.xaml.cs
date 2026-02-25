@@ -37,6 +37,7 @@ namespace PathSnip
     {
         private Point _startPoint;
         private bool _isSelecting;
+        private bool _hasStartedSelection;  // 是否开始过选区（用于右键判断）
         private Rect _currentRect;
         private AnnotationTool _currentTool = AnnotationTool.None;
         
@@ -74,11 +75,123 @@ namespace PathSnip
             MouseLeftButtonDown += OnMouseLeftButtonDown;
             MouseMove += OnMouseMove;
             MouseLeftButtonUp += OnMouseLeftButtonUp;
+            MouseRightButtonDown += OnMouseRightButtonDown;
 
             // 标注画布事件
             AnnotationCanvas.MouseLeftButtonDown += AnnotationCanvas_MouseLeftButtonDown;
             AnnotationCanvas.MouseMove += AnnotationCanvas_MouseMove;
             AnnotationCanvas.MouseLeftButtonUp += AnnotationCanvas_MouseLeftButtonUp;
+        }
+
+        private void OnMouseRightButtonDown(object sender, MouseButtonEventArgs e)
+        {
+            e.Handled = true;
+
+            // 第零级：取消正在绘制的标注
+            if (_isDrawing)
+            {
+                // 取消当前正在画的标注
+                if (_currentDrawingElement != null)
+                {
+                    AnnotationCanvas.Children.Remove(_currentDrawingElement);
+                    _currentDrawingElement = null;
+                }
+                _isDrawing = false;
+                return;
+            }
+
+            // 第一级：取消当前工具选中
+            if (_currentTool != AnnotationTool.None)
+            {
+                // 关闭气泡面板
+                PropertyPopup.IsOpen = false;
+                
+                _currentTool = AnnotationTool.None;
+                UpdateToolbarSelection();
+                return;
+            }
+
+            // 第二级：选区已锁定时，取消选区
+            if (_selectionCompleted)
+            {
+                ResetToSelectingState();
+                return;
+            }
+
+            // 第三级：选区未锁定但已开始过时，重置到初始状态
+            if (_hasStartedSelection)
+            {
+                ResetToInitialState();
+                return;
+            }
+
+            // 第四级：从未开始选区，直接退出
+            CaptureCancelled?.Invoke();
+        }
+
+        private void ResetToSelectingState()
+        {
+            _selectionCompleted = false;
+            _hasStartedSelection = false;
+            Toolbar.Visibility = Visibility.Collapsed;
+            AnnotationCanvas.Visibility = Visibility.Collapsed;
+            
+            // 隐藏选区相关元素
+            SelectionRect.Visibility = Visibility.Collapsed;
+            OuterMask.Visibility = Visibility.Collapsed;
+            SizeLabel.Visibility = Visibility.Collapsed;
+            
+            // 恢复初始状态
+            SelectionRect.IsHitTestVisible = true;
+            SizeLabel.IsHitTestVisible = true;
+            HintText.Visibility = Visibility.Visible;
+            
+            // 清除当前选区
+            _currentRect = Rect.Empty;
+            
+            // 清除标注画布和撤销栈（防止幽灵标注）
+            AnnotationCanvas.Children.Clear();
+            _undoStack.Clear();
+        }
+
+        private void ResetToInitialState()
+        {
+            _selectionCompleted = false;
+            _isSelecting = false;
+            _hasStartedSelection = false;
+            _currentTool = AnnotationTool.None;
+            
+            // 隐藏所有UI元素
+            Toolbar.Visibility = Visibility.Collapsed;
+            AnnotationCanvas.Visibility = Visibility.Collapsed;
+            SelectionRect.Visibility = Visibility.Collapsed;
+            OuterMask.Visibility = Visibility.Collapsed;
+            SizeLabel.Visibility = Visibility.Collapsed;
+            
+            // 显示提示文字
+            HintText.Visibility = Visibility.Visible;
+            
+            // 恢复可交互性
+            SelectionRect.IsHitTestVisible = true;
+            SizeLabel.IsHitTestVisible = true;
+            
+            // 清除当前选区
+            _currentRect = Rect.Empty;
+            
+            // 清除标注画布
+            AnnotationCanvas.Children.Clear();
+            _undoStack.Clear();
+            
+            // 更新工具栏状态
+            UpdateToolbarSelection();
+        }
+
+        private void UpdateToolbarSelection()
+        {
+            // 更新工具栏按钮的选中状态
+            RectToolBtn.IsChecked = _currentTool == AnnotationTool.Rectangle;
+            ArrowToolBtn.IsChecked = _currentTool == AnnotationTool.Arrow;
+            TextToolBtn.IsChecked = _currentTool == AnnotationTool.Text;
         }
 
         private void OnMouseLeftButtonDown(object sender, MouseButtonEventArgs e)
@@ -88,6 +201,7 @@ namespace PathSnip
 
             _startPoint = e.GetPosition(SelectionCanvas);
             _isSelecting = true;
+            _hasStartedSelection = true;
 
             SelectionRect.Visibility = Visibility.Visible;
             SizeLabel.Visibility = Visibility.Visible;

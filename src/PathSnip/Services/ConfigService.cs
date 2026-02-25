@@ -4,12 +4,21 @@ using Newtonsoft.Json;
 
 namespace PathSnip.Services
 {
+    public enum ClipboardMode
+    {
+        PathOnly,
+        ImageOnly,
+        ImageAndPath
+    }
+
     public class AppConfig
     {
         public string HotkeyModifiers { get; set; } = "Ctrl+Shift";
         public string HotkeyKey { get; set; } = "A";
         public string SaveDirectory { get; set; } = string.Empty;
         public bool ShowNotification { get; set; } = true;
+        public ClipboardMode ClipboardMode { get; set; } = ClipboardMode.PathOnly;
+        public string PathFormat { get; set; } = "Text";
     }
 
     public class ConfigService
@@ -27,6 +36,8 @@ namespace PathSnip.Services
         public string HotkeyKey { get; set; }
         public string SaveDirectory { get; set; }
         public bool ShowNotification { get; set; }
+        public ClipboardMode ClipboardMode { get; set; }
+        public string PathFormat { get; set; }
 
         private ConfigService()
         {
@@ -73,6 +84,8 @@ namespace PathSnip.Services
                 : _config.SaveDirectory;
 
             ShowNotification = _config.ShowNotification;
+            ClipboardMode = _config.ClipboardMode;
+            PathFormat = string.IsNullOrEmpty(_config.PathFormat) ? "Text" : _config.PathFormat;
         }
 
         public void Save()
@@ -83,6 +96,8 @@ namespace PathSnip.Services
                 _config.HotkeyKey = HotkeyKey;
                 _config.SaveDirectory = SaveDirectory;
                 _config.ShowNotification = ShowNotification;
+                _config.ClipboardMode = ClipboardMode;
+                _config.PathFormat = PathFormat;
 
                 var json = JsonConvert.SerializeObject(_config, Formatting.Indented);
                 File.WriteAllText(_configPath, json);

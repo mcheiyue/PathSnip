@@ -5,6 +5,20 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/zh-CN/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/lang/zh-CN/).
 
+## [v1.0.4] - 2026-02-25
+
+### ✨ 新特性 (Features)
+*   剪贴板模式选项：支持"仅路径"、"仅图片"、"图片+路径"三种模式
+*   路径格式支持：纯文本、Markdown、HTML 三种格式
+*   右键快捷取消：四级取消（取消绘制中 → 取消工具 → 取消选区 → 退出截图）
+
+### 🐛 问题修复 (Bug Fixes)
+*   修复选区取消时未清空画布导致的幽灵标注
+*   修复取消工具时未关闭气泡面板
+*   修复选区锁定后需多次右键才能退出的问题
+*   修复保存失败时未尝试复制图片的问题
+*   修复右键取消时未正确检测正在绘制的标注
+
 ## [v1.0.3] - 2026-02-25
 
 ### 🐛 问题修复 (Bug Fixes)

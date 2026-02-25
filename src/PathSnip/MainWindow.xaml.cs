@@ -178,16 +178,30 @@ namespace PathSnip
 
         private void OnCaptureCompletedWithImage(System.Windows.Media.Imaging.BitmapSource bitmap)
         {
+            string filePath = null;
             try
             {
                 // 保存文件并获取路径
-                var filePath = FileService.Save(bitmap);
+                filePath = FileService.Save(bitmap);
 
-                // 复制路径到剪贴板
-                ClipboardService.SetText(filePath);
+                // 根据配置选择复制模式
+                var config = ConfigService.Instance;
+                switch (config.ClipboardMode)
+                {
+                    case ClipboardMode.ImageOnly:
+                        ClipboardService.SetImage(bitmap);
+                        break;
+                    case ClipboardMode.ImageAndPath:
+                        ClipboardService.SetImageAndPath(bitmap, filePath);
+                        break;
+                    default:  // PathOnly
+                        var formattedPath = ClipboardService.FormatPath(filePath, config.PathFormat);
+                        ClipboardService.SetText(formattedPath);
+                        break;
+                }
 
                 // 根据配置决定是否显示通知
-                if (ConfigService.Instance.ShowNotification)
+                if (config.ShowNotification)
                 {
                     TrayIcon.ShowBalloonTip("PathSnip", $"已保存并复制路径", Hardcodet.Wpf.TaskbarNotification.BalloonIcon.Info);
                 }
@@ -196,8 +210,25 @@ namespace PathSnip
             }
             catch (Exception ex)
             {
-                LogService.Log($"截图失败: {ex.Message}");
-                TrayIcon.ShowBalloonTip("PathSnip", $"截图失败: {ex.Message}", Hardcodet.Wpf.TaskbarNotification.BalloonIcon.Error);
+                // 保存失败时，仍尝试复制图片
+                if (filePath == null)
+                {
+                    try
+                    {
+                        ClipboardService.SetImage(bitmap);
+                        LogService.Log("保存失败，但图片已复制到剪贴板");
+                        TrayIcon.ShowBalloonTip("PathSnip", "保存失败，图片已复制到剪贴板", Hardcodet.Wpf.TaskbarNotification.BalloonIcon.Warning);
+                    }
+                    catch
+                    {
+                        // 静默失败
+                    }
+                }
+                else
+                {
+                    LogService.Log($"截图失败: {ex.Message}");
+                    TrayIcon.ShowBalloonTip("PathSnip", $"截图失败: {ex.Message}", Hardcodet.Wpf.TaskbarNotification.BalloonIcon.Error);
+                }
             }
             finally
             {

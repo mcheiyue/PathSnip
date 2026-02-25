@@ -186,7 +186,7 @@
         <Image x:Name="BackgroundImage" Stretch="None" />
         
         <!-- 外部遮罩（选区外覆盖，挖孔效果） -->
-        <Path x:Name="OuterMask" Fill="#40000000" Visibility="Collapsed">
+        <Path x:Name="OuterMask" Fill="#73000000" Visibility="Collapsed">
             <Path.Data>
                 <GeometryGroup FillRule="EvenOdd">
                     <RectangleGeometry x:Name="FullScreenGeometry" Rect="0,0,10000,10000" />
