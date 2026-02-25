@@ -5,6 +5,28 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/zh-CN/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/lang/zh-CN/).
 
+## [v1.0.5] - 2026-02-25
+
+### ✨ 新特性 (Features)
+* **自定义文件名模板**：支持 {yyyy}{MM}{dd}{HHmmss}{GUID} 占位符，可自定义截图文件名格式
+* **马赛克工具**：新增自由涂抹马赛克功能，使用像素化效果遮挡敏感信息
+* **选区二次微调**：选区完成后可通过8个锚点调整选区大小，支持反向拖拽翻转
+
+### 🐛 问题修复 (Bug Fixes)
+* 修复 MainWindow 与 CaptureWindow 构造函数参数不匹配问题
+* 修复剪贴板模式和路径格式配置未生效问题
+* 修复标注溢出高亮区问题（调整XAML渲染层级）
+* 修复马赛克只能画线问题，改为Polyline自由轨迹
+* 修复锚点反向拖拽崩溃问题，实现智能翻转效果
+* 修复锚点拖拽时未收起属性栏问题
+* 修复马赛克画笔不可见问题（添加Viewbox/Viewport）
+* 修复设置界面脏状态泄漏问题
+
+### 🚀 优化 (Optimizations)
+* AnnotationCanvas保持全屏+Clip裁剪，避免标注位移
+* 添加DPI缩放计算，适配高DPI屏幕
+* 马赛克底图预渲染，优化涂抹性能
+
 ## [v1.0.4] - 2026-02-25
 
 ### ✨ 新特性 (Features)
