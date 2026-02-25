@@ -5,6 +5,20 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/zh-CN/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/lang/zh-CN/).
 
+## [v1.0.6] - 2026-02-26
+
+### 🐛 问题修复 (Bug Fixes)
+* **高DPI截屏不全**：修复高DPI屏幕下截图区域不完整问题，使用物理像素转换
+* **保存截图标注偏移**：修复保存时标注错位问题，使用TranslateTransform反向平移+VisualBrush绝对视图区约束
+* **图片+路径模式路径格式化**：修复剪贴板模式为ImageAndPath时路径未格式化问题
+* **锚点拖拽幽灵跳跃**：修复使用dx/dy累加导致拖拽不稳定问题，改用绝对坐标计算
+* **锚点拖拽光标错乱**：添加光标翻转逻辑，拖拽越过中心时自动切换光标方向
+* **CroppedBitmap越界**：添加Math.Min边界防护，防止浮点数进位导致越界异常
+
+### 🚀 优化 (Optimizations)
+* RenderTargetBitmap尺寸改为选区大小，直接输出无需二次裁剪
+* 锚点拖拽最小尺寸限制改为1像素，消除抖动
+
 ## [v1.0.5] - 2026-02-25
 
 ### ✨ 新特性 (Features)

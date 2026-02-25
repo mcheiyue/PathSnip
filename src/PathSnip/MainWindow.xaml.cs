@@ -192,7 +192,8 @@ namespace PathSnip
                         ClipboardService.SetImage(bitmap);
                         break;
                     case ClipboardMode.ImageAndPath:
-                        ClipboardService.SetImageAndPath(bitmap, filePath);
+                        var formattedPathForImageAndPath = ClipboardService.FormatPath(filePath, config.PathFormat);
+                        ClipboardService.SetImageAndPath(bitmap, formattedPathForImageAndPath);
                         break;
                     default:  // PathOnly
                         var formattedPath = ClipboardService.FormatPath(filePath, config.PathFormat);

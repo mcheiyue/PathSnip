@@ -52,6 +52,10 @@ namespace PathSnip
         // 记录拖拽开始时的四个虚拟边界（用于反向拖拽翻转）
         private double _dragLeft, _dragTop, _dragRight, _dragBottom;
         
+        // 记录鼠标相对于锚点的偏移量（用于绝对坐标拖拽）
+        private double _mouseOffsetX;
+        private double _mouseOffsetY;
+        
         private bool _isDrawing;
         private UIElement _currentDrawingElement;
         private readonly Stack<UIElement> _undoStack = new Stack<UIElement>();
@@ -712,19 +716,19 @@ namespace PathSnip
             // 强制当前焦点元素（如 TextBox）失去焦点，隐藏输入光标
             Keyboard.ClearFocus();
 
-            // 隐藏UI元素，只保留背景图和标注
+            // 隐藏所有不需要被截入的 UI 元素
             SelectionRect.Visibility = Visibility.Collapsed;
             SizeLabel.Visibility = Visibility.Collapsed;
             OuterMask.Visibility = Visibility.Collapsed;
             Toolbar.Visibility = Visibility.Collapsed;
-            
-            // 强制渲染
+            HideResizeAnchors(); // 隐藏锚点
+
+            // 强制渲染，确保UI已经隐藏
             Dispatcher.Invoke(() => { }, System.Windows.Threading.DispatcherPriority.Render);
-            
-            // 使用背景图 + 标注合成后裁剪
+
             if (BackgroundImage.Source is BitmapSource background)
             {
-                // 获取当前屏幕 DPI
+                // 1. 获取当前屏幕 DPI
                 PresentationSource source = PresentationSource.FromVisual(this);
                 double dpiX = 96.0, dpiY = 96.0;
                 if (source?.CompositionTarget != null)
@@ -733,65 +737,67 @@ namespace PathSnip
                     dpiY = 96.0 * source.CompositionTarget.TransformToDevice.M22;
                 }
 
-                // 计算物理像素尺寸
-                var width = (int)(Width * dpiX / 96.0);
-                var height = (int)(Height * dpiY / 96.0);
-                
-                // 创建渲染目标（使用实际 DPI）
-                var renderBitmap = new RenderTargetBitmap(width, height, dpiX, dpiY, PixelFormats.Pbgra32);
-                
+                // 2. 关键修复：直接计算【选区】的物理像素尺寸，而不是全屏！
+                var physicalWidth = (int)(_currentRect.Width * dpiX / 96.0);
+                var physicalHeight = (int)(_currentRect.Height * dpiY / 96.0);
+
+                // 3. 创建正好等于【选区尺寸】的画布
+                var renderBitmap = new RenderTargetBitmap(physicalWidth, physicalHeight, dpiX, dpiY, PixelFormats.Pbgra32);
+
                 var drawingVisual = new DrawingVisual();
                 using (var dc = drawingVisual.RenderOpen())
                 {
-                    // 绘制背景图（需要按 DPI 比例缩放）
-                    dc.DrawImage(background, new Rect(0, 0, width, height));
-                    
-                    // 绘制标注画布内容（只绘制在选区内）
+                    // 4. 先用 CroppedBitmap 从原全屏背景图中把选区抠出来
+                    // 使用 Math.Min 防止超出原背景图的物理边界
+                    int cropX = (int)(_currentRect.Left * dpiX / 96.0);
+                    int cropY = (int)(_currentRect.Top * dpiY / 96.0);
+                    int cropW = Math.Min(physicalWidth, background.PixelWidth - cropX);
+                    int cropH = Math.Min(physicalHeight, background.PixelHeight - cropY);
+
+                    var bgCropRect = new Int32Rect(cropX, cropY, cropW, cropH);
+                    var croppedBackground = new CroppedBitmap(background, bgCropRect);
+
+                    // 把抠出来的背景图画在 (0,0)，使用物理像素尺寸
+                    dc.DrawImage(croppedBackground, new Rect(0, 0, physicalWidth, physicalHeight));
+
+                    // 5. 绘制标注层
                     if (AnnotationCanvas.Visibility == Visibility.Visible)
                     {
-                        // 创建裁剪区域（只绘制选区内，按 DPI 比例缩放）
-                        var clipGeometry = new RectangleGeometry(new Rect(
-                            _currentRect.Left * dpiX / 96.0,
-                            _currentRect.Top * dpiY / 96.0,
-                            _currentRect.Width * dpiX / 96.0,
-                            _currentRect.Height * dpiY / 96.0));
-                        dc.PushClip(clipGeometry);
-                        
-                        // 绘制标注画布（需要偏移到正确位置，按 DPI 比例缩放）
+                        // 将全屏的 AnnotationCanvas 向左上方平移，使其选区部分恰好落入 (0,0)
+                        dc.PushTransform(new TranslateTransform(-_currentRect.Left, -_currentRect.Top));
+
                         var annotationBrush = new VisualBrush(AnnotationCanvas)
                         {
-                            Stretch = Stretch.None,
+                            Stretch = Stretch.None, // 绝对不拉伸
                             AlignmentX = AlignmentX.Left,
-                            AlignmentY = AlignmentY.Top
+                            AlignmentY = AlignmentY.Top,
+                            
+                            // ================= 【核心修复在这里】 =================
+                            // 必须强制指定绝对视图区！
+                            // 拒绝 VisualBrush 自动裁剪内容边界，强行捕获全屏坐标系，防止产生双倍偏移！
+                            ViewboxUnits = BrushMappingMode.Absolute,
+                            Viewbox = new Rect(0, 0, ActualWidth, ActualHeight),
+                            ViewportUnits = BrushMappingMode.Absolute,
+                            Viewport = new Rect(0, 0, ActualWidth, ActualHeight)
+                            // ======================================================
                         };
-                        // 标注画布的绘制位置
-                        var annotationLeft = Canvas.GetLeft(AnnotationCanvas) * dpiX / 96.0;
-                        var annotationTop = Canvas.GetTop(AnnotationCanvas) * dpiY / 96.0;
-                        var annotationWidth = AnnotationCanvas.Width * dpiX / 96.0;
-                        var annotationHeight = AnnotationCanvas.Height * dpiY / 96.0;
-                        dc.DrawRectangle(annotationBrush, null, new Rect(annotationLeft, annotationTop, annotationWidth, annotationHeight));
-                        
+
+                        // 画笔是全屏大小的，通过上面的平移，它会自动把对应的部分严丝合缝地填入背景之上
+                        dc.DrawRectangle(annotationBrush, null, new Rect(0, 0, ActualWidth, ActualHeight));
+
                         dc.Pop();
                     }
                 }
-                
+
+                // 6. 渲染合成
                 renderBitmap.Render(drawingVisual);
-                
-                // 裁剪选区部分（按 DPI 比例缩放）
-                var cropRect = new Int32Rect(
-                    (int)(_currentRect.Left * dpiX / 96.0),
-                    (int)(_currentRect.Top * dpiY / 96.0),
-                    (int)(_currentRect.Width * dpiX / 96.0),
-                    (int)(_currentRect.Height * dpiY / 96.0));
-                
-                var croppedBitmap = new CroppedBitmap(renderBitmap, cropRect);
-                
-                // 触发保存
-                CaptureCompletedWithImage?.Invoke(croppedBitmap);
+
+                // 7. 直接输出！不再需要用 CroppedBitmap 二次裁剪了
+                CaptureCompletedWithImage?.Invoke(renderBitmap);
                 return;
             }
-            
-            // 如果没有背景图，回退到原来的方式
+
+            // 如果没有背景图的回退逻辑
             var screenRect = new Rect(
                 _currentRect.Left + Left,
                 _currentRect.Top + Top,
@@ -1084,41 +1090,52 @@ namespace PathSnip
             Toolbar.Visibility = Visibility.Collapsed;
             PropertyPopup.IsOpen = false;
 
-            var dx = e.HorizontalChange;
-            var dy = e.VerticalChange;
+            var pos = Mouse.GetPosition(SelectionCanvas);
+            double mouseX = pos.X;
+            double mouseY = pos.Y;
 
-            // 1. 根据拖拽的锚点，更新"虚拟"边界（允许 Left > Right，这代表发生反向穿透）
-            if (thumb == ResizeTopLeft) { _dragLeft += dx; _dragTop += dy; }
-            else if (thumb == ResizeTopRight) { _dragRight += dx; _dragTop += dy; }
-            else if (thumb == ResizeBottomLeft) { _dragLeft += dx; _dragBottom += dy; }
-            else if (thumb == ResizeBottomRight) { _dragRight += dx; _dragBottom += dy; }
-            else if (thumb == ResizeTop) { _dragTop += dy; }
-            else if (thumb == ResizeBottom) { _dragBottom += dy; }
-            else if (thumb == ResizeLeft) { _dragLeft += dx; }
-            else if (thumb == ResizeRight) { _dragRight += dx; }
+            // 使用绝对坐标彻底取代 dx/dy
+            if (thumb == ResizeTopLeft) { _dragLeft = mouseX + _mouseOffsetX; _dragTop = mouseY + _mouseOffsetY; }
+            else if (thumb == ResizeTopRight) { _dragRight = mouseX + _mouseOffsetX; _dragTop = mouseY + _mouseOffsetY; }
+            else if (thumb == ResizeBottomLeft) { _dragLeft = mouseX + _mouseOffsetX; _dragBottom = mouseY + _mouseOffsetY; }
+            else if (thumb == ResizeBottomRight) { _dragRight = mouseX + _mouseOffsetX; _dragBottom = mouseY + _mouseOffsetY; }
+            else if (thumb == ResizeTop) { _dragTop = mouseY + _mouseOffsetY; }
+            else if (thumb == ResizeBottom) { _dragBottom = mouseY + _mouseOffsetY; }
+            else if (thumb == ResizeLeft) { _dragLeft = mouseX + _mouseOffsetX; }
+            else if (thumb == ResizeRight) { _dragRight = mouseX + _mouseOffsetX; }
 
-            // 2. 重新排列：取最小值作为起点，差值的绝对值作为宽高（完美解决反向穿透翻转）
             double newLeft = Math.Min(_dragLeft, _dragRight);
+            double newRight = Math.Max(_dragLeft, _dragRight);
             double newTop = Math.Min(_dragTop, _dragBottom);
-            double newWidth = Math.Abs(_dragRight - _dragLeft);
-            double newHeight = Math.Abs(_dragBottom - _dragTop);
+            double newBottom = Math.Max(_dragTop, _dragBottom);
 
-            // 3. 屏幕边界约束
+            // 改为 1 像素限制，解决固定边发抖
+            if (newRight - newLeft < 1) newRight = newLeft + 1;
+            if (newBottom - newTop < 1) newBottom = newTop + 1;
+
+            double newWidth = newRight - newLeft;
+            double newHeight = newBottom - newTop;
+
+            // 屏幕边界约束
             if (newLeft < 0) { newWidth += newLeft; newLeft = 0; }
             if (newTop < 0) { newHeight += newTop; newTop = 0; }
             if (newLeft + newWidth > Width) newWidth = Width - newLeft;
             if (newTop + newHeight > Height) newHeight = Height - newTop;
 
-            // 4. 最小尺寸约束
-            if (newWidth < 5) newWidth = 5;
-            if (newHeight < 5) newHeight = 5;
-
             _currentRect = new Rect(newLeft, newTop, newWidth, newHeight);
 
-            // 5. 更新UI
+            // 更新UI
             UpdateSelection(_currentRect.TopLeft, _currentRect.BottomRight);
             UpdateResizeAnchors();
             AnnotationCanvas.Clip = new RectangleGeometry(_currentRect);
+
+            // 黑科技光标翻转
+            bool isFlippedX = _dragLeft > _dragRight;
+            bool isFlippedY = _dragTop > _dragBottom;
+            if (thumb == ResizeTopLeft || thumb == ResizeBottomRight)
+                thumb.Cursor = (isFlippedX ^ isFlippedY) ? Cursors.SizeNESW : Cursors.SizeNWSE;
+            else if (thumb == ResizeTopRight || thumb == ResizeBottomLeft)
+                thumb.Cursor = (isFlippedX ^ isFlippedY) ? Cursors.SizeNWSE : Cursors.SizeNESW;
         }
 
         private void ResizeThumb_MouseRightButtonDown(object sender, MouseButtonEventArgs e)
@@ -1130,19 +1147,37 @@ namespace PathSnip
 
         private void ResizeThumb_DragStarted(object sender, DragStartedEventArgs e)
         {
-            // 开始拖拽时，记录当前的真实边界
+            var thumb = sender as Thumb;
+            if (thumb == null) return;
+
+            var pos = Mouse.GetPosition(SelectionCanvas);
             _dragLeft = _currentRect.Left;
             _dragTop = _currentRect.Top;
             _dragRight = _currentRect.Right;
             _dragBottom = _currentRect.Bottom;
 
-            // 隐藏工具栏和属性栏
+            // 记录鼠标相对于锚点的偏移量（用于绝对坐标拖拽）
+            if (thumb == ResizeTopLeft) { _mouseOffsetX = _dragLeft - pos.X; _mouseOffsetY = _dragTop - pos.Y; }
+            else if (thumb == ResizeTopRight) { _mouseOffsetX = _dragRight - pos.X; _mouseOffsetY = _dragTop - pos.Y; }
+            else if (thumb == ResizeBottomLeft) { _mouseOffsetX = _dragLeft - pos.X; _mouseOffsetY = _dragBottom - pos.Y; }
+            else if (thumb == ResizeBottomRight) { _mouseOffsetX = _dragRight - pos.X; _mouseOffsetY = _dragBottom - pos.Y; }
+            else if (thumb == ResizeTop) { _mouseOffsetY = _dragTop - pos.Y; }
+            else if (thumb == ResizeBottom) { _mouseOffsetY = _dragBottom - pos.Y; }
+            else if (thumb == ResizeLeft) { _mouseOffsetX = _dragLeft - pos.X; }
+            else if (thumb == ResizeRight) { _mouseOffsetX = _dragRight - pos.X; }
+
             Toolbar.Visibility = Visibility.Collapsed;
             PropertyPopup.IsOpen = false;
         }
 
         private void ResizeThumb_DragCompleted(object sender, DragCompletedEventArgs e)
         {
+            // 恢复正常光标
+            ResizeTopLeft.Cursor = Cursors.SizeNWSE;
+            ResizeBottomRight.Cursor = Cursors.SizeNWSE;
+            ResizeTopRight.Cursor = Cursors.SizeNESW;
+            ResizeBottomLeft.Cursor = Cursors.SizeNESW;
+
             // 拖拽结束后，ShowToolbar 会根据新的 _currentRect 重新定位工具栏
             ShowToolbar();
 

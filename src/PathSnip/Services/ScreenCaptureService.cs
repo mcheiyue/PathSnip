@@ -4,6 +4,8 @@ using System.Drawing.Imaging;
 using System.IO;
 using System.Windows;
 using System.Windows.Media.Imaging;
+using System.Windows.Interop;
+using System.Windows.Media;
 
 namespace PathSnip.Services
 {
@@ -11,10 +13,27 @@ namespace PathSnip.Services
     {
         public static BitmapSource Capture(Rect region)
         {
-            int left = (int)region.Left;
-            int top = (int)region.Top;
-            int width = (int)region.Width;
-            int height = (int)region.Height;
+            // 获取当前屏幕 DPI
+            double dpiScaleX = 1.0;
+            double dpiScaleY = 1.0;
+            
+            var mainWindow = System.Windows.Application.Current?.MainWindow;
+            if (mainWindow != null)
+            {
+                var presentationSource = PresentationSource.FromVisual(mainWindow);
+                if (presentationSource?.CompositionTarget != null)
+                {
+                    var transform = presentationSource.CompositionTarget.TransformToDevice;
+                    dpiScaleX = transform.M11;
+                    dpiScaleY = transform.M22;
+                }
+            }
+
+            // 将逻辑像素转换为物理像素
+            int left = (int)(region.Left * dpiScaleX);
+            int top = (int)(region.Top * dpiScaleY);
+            int width = (int)(region.Width * dpiScaleX);
+            int height = (int)(region.Height * dpiScaleY);
 
             if (width <= 0 || height <= 0)
             {
