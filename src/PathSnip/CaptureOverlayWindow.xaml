@@ -185,7 +185,10 @@
         <!-- 背景截图 -->
         <Image x:Name="BackgroundImage" Stretch="None" />
         
-        <!-- 外部遮罩（选区外覆盖，挖孔效果） -->
+        <!-- 标注画布 - 必须在遮罩之前，这样选区外的标注会被半透明遮罩盖住 -->
+        <Canvas x:Name="AnnotationCanvas" Background="Transparent" Visibility="Collapsed" ClipToBounds="True" />
+        
+        <!-- 外部遮罩（选区外覆盖，挖孔效果）- 必须在标注画布之后 -->
         <Path x:Name="OuterMask" Fill="#73000000" Visibility="Collapsed">
             <Path.Data>
                 <GeometryGroup FillRule="EvenOdd">
@@ -215,10 +218,60 @@
                            FontSize="12"
                            FontFamily="Segoe UI" />
             </Border>
+            
+            <!-- 选区调整锚点 - 8个 -->
+            <!-- 四角锚点 -->
+            <Thumb x:Name="ResizeTopLeft" Width="10" Height="10" Cursor="SizeNWSE" 
+                   Background="White" BorderBrush="#0078D4" BorderThickness="1"
+                   Visibility="Collapsed" DragDelta="ResizeThumb_DragDelta" 
+                   DragStarted="ResizeThumb_DragStarted"
+                   DragCompleted="ResizeThumb_DragCompleted"
+                   MouseRightButtonDown="ResizeThumb_MouseRightButtonDown" />
+            <Thumb x:Name="ResizeTopRight" Width="10" Height="10" Cursor="SizeNESW"
+                   Background="White" BorderBrush="#0078D4" BorderThickness="1"
+                   Visibility="Collapsed" DragDelta="ResizeThumb_DragDelta"
+                   DragStarted="ResizeThumb_DragStarted"
+                   DragCompleted="ResizeThumb_DragCompleted"
+                   MouseRightButtonDown="ResizeThumb_MouseRightButtonDown" />
+            <Thumb x:Name="ResizeBottomLeft" Width="10" Height="10" Cursor="SizeNESW"
+                   Background="White" BorderBrush="#0078D4" BorderThickness="1"
+                   Visibility="Collapsed" DragDelta="ResizeThumb_DragDelta"
+                   DragStarted="ResizeThumb_DragStarted"
+                   DragCompleted="ResizeThumb_DragCompleted"
+                   MouseRightButtonDown="ResizeThumb_MouseRightButtonDown" />
+            <Thumb x:Name="ResizeBottomRight" Width="10" Height="10" Cursor="SizeNWSE"
+                   Background="White" BorderBrush="#0078D4" BorderThickness="1"
+                   Visibility="Collapsed" DragDelta="ResizeThumb_DragDelta"
+                   DragStarted="ResizeThumb_DragStarted"
+                   DragCompleted="ResizeThumb_DragCompleted"
+                   MouseRightButtonDown="ResizeThumb_MouseRightButtonDown" />
+            
+            <!-- 四边中点锚点 -->
+            <Thumb x:Name="ResizeTop" Width="10" Height="10" Cursor="SizeNS"
+                   Background="White" BorderBrush="#0078D4" BorderThickness="1"
+                   Visibility="Collapsed" DragDelta="ResizeThumb_DragDelta"
+                   DragStarted="ResizeThumb_DragStarted"
+                   DragCompleted="ResizeThumb_DragCompleted"
+                   MouseRightButtonDown="ResizeThumb_MouseRightButtonDown" />
+            <Thumb x:Name="ResizeBottom" Width="10" Height="10" Cursor="SizeNS"
+                   Background="White" BorderBrush="#0078D4" BorderThickness="1"
+                   Visibility="Collapsed" DragDelta="ResizeThumb_DragDelta"
+                   DragStarted="ResizeThumb_DragStarted"
+                   DragCompleted="ResizeThumb_DragCompleted"
+                   MouseRightButtonDown="ResizeThumb_MouseRightButtonDown" />
+            <Thumb x:Name="ResizeLeft" Width="10" Height="10" Cursor="SizeWE"
+                   Background="White" BorderBrush="#0078D4" BorderThickness="1"
+                   Visibility="Collapsed" DragDelta="ResizeThumb_DragDelta"
+                   DragStarted="ResizeThumb_DragStarted"
+                   DragCompleted="ResizeThumb_DragCompleted"
+                   MouseRightButtonDown="ResizeThumb_MouseRightButtonDown" />
+            <Thumb x:Name="ResizeRight" Width="10" Height="10" Cursor="SizeWE"
+                   Background="White" BorderBrush="#0078D4" BorderThickness="1"
+                   Visibility="Collapsed" DragDelta="ResizeThumb_DragDelta"
+                   DragStarted="ResizeThumb_DragStarted"
+                   DragCompleted="ResizeThumb_DragCompleted"
+                   MouseRightButtonDown="ResizeThumb_MouseRightButtonDown" />
         </Canvas>
-        
-        <!-- 标注画布 - 需要透明背景才能接收鼠标事件，且限制子元素在边界内 -->
-        <Canvas x:Name="AnnotationCanvas" Background="Transparent" Visibility="Collapsed" ClipToBounds="True" />
         
         <!-- 浮动工具栏 -->
         <Border x:Name="Toolbar"
@@ -237,6 +290,8 @@
                              Content="&#xE72A;" ToolTip="箭头标注" Checked="Tool_Checked" Unchecked="Tool_Unchecked" Tag="Arrow" />
                 <RadioButton x:Name="TextToolBtn" GroupName="Tools" Style="{StaticResource ToolRadioButtonStyle}"
                              Content="&#xE70F;" ToolTip="文字标注" Checked="Tool_Checked" Unchecked="Tool_Unchecked" Tag="Text" />
+                <RadioButton x:Name="MosaicToolBtn" GroupName="Tools" Style="{StaticResource ToolRadioButtonStyle}"
+                             Content="&#xE7B3;" ToolTip="马赛克" Checked="Tool_Checked" Unchecked="Tool_Unchecked" Tag="Mosaic" />
                 
                 <!-- 分隔线 -->
                 <Rectangle Width="1" Fill="#E0E0E0" Margin="6,4" />

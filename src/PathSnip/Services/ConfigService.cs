@@ -19,6 +19,7 @@ namespace PathSnip.Services
         public bool ShowNotification { get; set; } = true;
         public ClipboardMode ClipboardMode { get; set; } = ClipboardMode.PathOnly;
         public string PathFormat { get; set; } = "Text";
+        public string FileNameTemplate { get; set; } = "{yyyy}-{MM}-{dd}_{HHmmss}";
     }
 
     public class ConfigService
@@ -38,6 +39,7 @@ namespace PathSnip.Services
         public bool ShowNotification { get; set; }
         public ClipboardMode ClipboardMode { get; set; }
         public string PathFormat { get; set; }
+        public string FileNameTemplate { get; set; }
 
         private ConfigService()
         {
@@ -86,6 +88,7 @@ namespace PathSnip.Services
             ShowNotification = _config.ShowNotification;
             ClipboardMode = _config.ClipboardMode;
             PathFormat = string.IsNullOrEmpty(_config.PathFormat) ? "Text" : _config.PathFormat;
+            FileNameTemplate = string.IsNullOrEmpty(_config.FileNameTemplate) ? "{yyyy}-{MM}-{dd}_{HHmmss}" : _config.FileNameTemplate;
         }
 
         public void Save()
@@ -98,6 +101,7 @@ namespace PathSnip.Services
                 _config.ShowNotification = ShowNotification;
                 _config.ClipboardMode = ClipboardMode;
                 _config.PathFormat = PathFormat;
+                _config.FileNameTemplate = FileNameTemplate;
 
                 var json = JsonConvert.SerializeObject(_config, Formatting.Indented);
                 File.WriteAllText(_configPath, json);

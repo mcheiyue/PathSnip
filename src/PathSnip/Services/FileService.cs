@@ -14,15 +14,15 @@ namespace PathSnip.Services
             // 确保目录存在
             Directory.CreateDirectory(directory);
 
-            // 生成文件名
-            string fileName = $"{DateTime.Now:yyyy-MM-dd_HHmmss}.png";
+            // 使用模板生成文件名
+            string fileName = GenerateFileName(config.FileNameTemplate) + ".png";
             string fullPath = Path.Combine(directory, fileName);
 
             // 处理文件名冲突
             int counter = 1;
             while (File.Exists(fullPath))
             {
-                fileName = $"{DateTime.Now:yyyy-MM-dd_HHmmss}_{counter}.png";
+                fileName = $"{GenerateFileName(config.FileNameTemplate)}_{counter}.png";
                 fullPath = Path.Combine(directory, fileName);
                 counter++;
             }
@@ -36,6 +36,33 @@ namespace PathSnip.Services
             }
 
             return fullPath;
+        }
+
+        private static string GenerateFileName(string template)
+        {
+            var now = DateTime.Now;
+            var result = template;
+
+            // 替换日期时间占位符
+            result = result.Replace("{yyyy}", now.ToString("yyyy"));
+            result = result.Replace("{MM}", now.ToString("MM"));
+            result = result.Replace("{dd}", now.ToString("dd"));
+            result = result.Replace("{HH}", now.ToString("HH"));
+            result = result.Replace("{mm}", now.ToString("mm"));
+            result = result.Replace("{ss}", now.ToString("ss"));
+            result = result.Replace("{HHmmss}", now.ToString("HHmmss"));
+
+            // 替换 GUID 占位符
+            result = result.Replace("{GUID}", Guid.NewGuid().ToString("N").Substring(0, 8));
+
+            // 过滤非法字符（防御性编程）
+            var invalidChars = Path.GetInvalidFileNameChars();
+            foreach (var c in invalidChars)
+            {
+                result = result.Replace(c.ToString(), "_");
+            }
+
+            return result;
         }
     }
 }

@@ -16,7 +16,8 @@ namespace PathSnip
         None,
         Rectangle,
         Arrow,
-        Text
+        Text,
+        Mosaic
     }
 
     public enum AnnotationColor
@@ -46,6 +47,10 @@ namespace PathSnip
         private AnnotationThickness _rectThickness = AnnotationThickness.Medium;
         private AnnotationColor _arrowColor = AnnotationColor.Blue;
         private AnnotationThickness _arrowThickness = AnnotationThickness.Medium;
+        private AnnotationThickness _mosaicThickness = AnnotationThickness.Medium;
+        
+        // 记录拖拽开始时的四个虚拟边界（用于反向拖拽翻转）
+        private double _dragLeft, _dragTop, _dragRight, _dragBottom;
         
         private bool _isDrawing;
         private UIElement _currentDrawingElement;
@@ -71,6 +76,9 @@ namespace PathSnip
 
             // 初始化全屏遮罩矩形
             FullScreenGeometry.Rect = new Rect(0, 0, Width, Height);
+
+            // 预渲染马赛克背景（性能优化）
+            PrepareMosaicBackground();
 
             MouseLeftButtonDown += OnMouseLeftButtonDown;
             MouseMove += OnMouseMove;
@@ -141,6 +149,9 @@ namespace PathSnip
             OuterMask.Visibility = Visibility.Collapsed;
             SizeLabel.Visibility = Visibility.Collapsed;
             
+            // 隐藏调整锚点
+            HideResizeAnchors();
+            
             // 恢复初始状态
             SelectionRect.IsHitTestVisible = true;
             SizeLabel.IsHitTestVisible = true;
@@ -167,6 +178,7 @@ namespace PathSnip
             SelectionRect.Visibility = Visibility.Collapsed;
             OuterMask.Visibility = Visibility.Collapsed;
             SizeLabel.Visibility = Visibility.Collapsed;
+            HideResizeAnchors();
             
             // 显示提示文字
             HintText.Visibility = Visibility.Visible;
@@ -270,16 +282,22 @@ namespace PathSnip
             Canvas.SetTop(Toolbar, toolbarTop);
             Toolbar.Visibility = Visibility.Visible;
 
-            // 激活标注画布
+            // 激活标注画布 - 保持全屏不动，避免标注位移
             AnnotationCanvas.Visibility = Visibility.Visible;
-            Canvas.SetLeft(AnnotationCanvas, _currentRect.Left);
-            Canvas.SetTop(AnnotationCanvas, _currentRect.Top);
-            AnnotationCanvas.Width = _currentRect.Width;
-            AnnotationCanvas.Height = _currentRect.Height;
+            Canvas.SetLeft(AnnotationCanvas, 0);
+            Canvas.SetTop(AnnotationCanvas, 0);
+            AnnotationCanvas.Width = Width;
+            AnnotationCanvas.Height = Height;
+            
+            // 设置裁剪区域，使标注只显示在选区内
+            AnnotationCanvas.Clip = new RectangleGeometry(_currentRect);
 
             // 锁定选区后不再响应主窗口的鼠标事件
             SelectionRect.IsHitTestVisible = false;
             SizeLabel.IsHitTestVisible = false;
+
+            // 显示选区调整锚点
+            ShowResizeAnchors();
         }
 
         private void UpdateSelection(Point start, Point end)
@@ -370,6 +388,22 @@ namespace PathSnip
                 AnnotationCanvas.Children.Add(arrowPath);
                 _currentDrawingElement = arrowPath;
             }
+            else if (_currentTool == AnnotationTool.Mosaic)
+            {
+                // 改用 Polyline 实现自由画笔涂抹
+                var blockSize = GetMosaicBlockSize();
+                var polyline = new Polyline
+                {
+                    Stroke = CreateMosaicBrush(),
+                    StrokeThickness = blockSize,
+                    StrokeStartLineCap = PenLineCap.Round,
+                    StrokeEndLineCap = PenLineCap.Round,
+                    StrokeLineJoin = PenLineJoin.Round
+                };
+                polyline.Points.Add(_startPoint);
+                AnnotationCanvas.Children.Add(polyline);
+                _currentDrawingElement = polyline;
+            }
 
             AnnotationCanvas.CaptureMouse();
         }
@@ -404,6 +438,123 @@ namespace PathSnip
             return group;
         }
 
+        private int GetMosaicBlockSize()
+        {
+            // Thin=8, Medium=16, Thick=32
+            switch (_mosaicThickness)
+            {
+                case AnnotationThickness.Thin:
+                    return 8;
+                case AnnotationThickness.Thick:
+                    return 32;
+                default:
+                    return 16;
+            }
+        }
+
+        // 预渲染的马赛克背景（用于自由涂抹）
+        private BitmapSource _mosaicBackground;
+        private double _dpiScaleX = 1.0;
+        private double _dpiScaleY = 1.0;
+
+        private void PrepareMosaicBackground()
+        {
+            if (BackgroundImage.Source == null) return;
+
+            // 获取 DPI 缩放因子
+            PresentationSource source = PresentationSource.FromVisual(this);
+            if (source?.CompositionTarget != null)
+            {
+                _dpiScaleX = source.CompositionTarget.TransformToDevice.M11;
+                _dpiScaleY = source.CompositionTarget.TransformToDevice.M22;
+            }
+
+            var bg = BackgroundImage.Source as BitmapSource;
+            if (bg == null) return;
+
+            // 创建全屏马赛克背景（预渲染一次，性能优化）
+            int width = (int)(Width * _dpiScaleX);
+            int height = (int)(Height * _dpiScaleY);
+
+            // 缩放到较小尺寸
+            int smallWidth = Math.Max(1, width / 32);
+            int smallHeight = Math.Max(1, height / 32);
+
+            var smallBitmap = new TransformedBitmap(bg, new ScaleTransform(
+                (double)smallWidth / width,
+                (double)smallHeight / height));
+
+            // 放大回来，使用邻近插值
+            var renderBitmap = new TransformedBitmap(smallBitmap, new ScaleTransform(
+                (double)width / smallWidth,
+                (double)height / smallHeight));
+
+            // 创建可用的位图
+            var visual = new DrawingVisual();
+            using (var dc = visual.RenderOpen())
+            {
+                dc.DrawImage(renderBitmap, new Rect(0, 0, width, height));
+            }
+
+            var result = new RenderTargetBitmap(width, height, 96 * _dpiScaleX, 96 * _dpiScaleY, PixelFormats.Pbgra32);
+            result.Render(visual);
+
+            _mosaicBackground = result;
+        }
+
+        private Path CreateMosaicPath(double x1, double y1, double x2, double y2, double thickness)
+        {
+            var path = new Path
+            {
+                Stroke = CreateMosaicBrush(),
+                StrokeThickness = thickness,
+                StrokeStartLineCap = PenLineCap.Round,
+                StrokeEndLineCap = PenLineCap.Round,
+                StrokeLineJoin = PenLineJoin.Round
+            };
+
+            path.Data = CreateLineGeometry(x1, y1, x2, y2);
+            return path;
+        }
+
+        private Geometry CreateLineGeometry(double x1, double y1, double x2, double y2)
+        {
+            return new LineGeometry(new Point(x1, y1), new Point(x2, y2));
+        }
+
+        private Brush CreateMosaicBrush()
+        {
+            // 如果预渲染失败，做个保底
+            if (_mosaicBackground == null)
+            {
+                return Brushes.Gray;
+            }
+
+            // 使用 ImageBrush，把全屏的马赛克底图作为画笔的"颜料"
+            return new ImageBrush(_mosaicBackground)
+            {
+                Stretch = Stretch.None,
+                AlignmentX = AlignmentX.Left,
+                AlignmentY = AlignmentY.Top,
+                Viewbox = new Rect(0, 0, _mosaicBackground.Width, _mosaicBackground.Height),
+                ViewboxUnits = BrushMappingMode.Absolute,
+                Viewport = new Rect(0, 0, _mosaicBackground.Width, _mosaicBackground.Height),
+                ViewportUnits = BrushMappingMode.Absolute
+            };
+        }
+
+        private void UpdateMosaicPath(Path path, double x1, double y1, double x2, double y2)
+        {
+            if (path == null) return;
+            path.Data = CreateLineGeometry(x1, y1, x2, y2);
+        }
+
+        private class MosaicData
+        {
+            public Rect Rect { get; set; }
+            public int BlockSize { get; set; }
+        }
+
         private void AnnotationCanvas_MouseMove(object sender, MouseEventArgs e)
         {
             if (!_isDrawing) return;
@@ -433,6 +584,11 @@ namespace PathSnip
                 var endY = Math.Max(0, Math.Min(currentPoint.Y, AnnotationCanvas.Height));
                 var thickness = GetCurrentThickness();
                 arrowPath.Data = CreateArrowGeometry(_startPoint.X, _startPoint.Y, endX, endY, thickness);
+            }
+            else if (_currentTool == AnnotationTool.Mosaic && _currentDrawingElement is Polyline polyline)
+            {
+                // 自由涂抹：不断添加鼠标经过的轨迹点
+                polyline.Points.Add(currentPoint);
             }
         }
 
@@ -475,6 +631,10 @@ namespace PathSnip
                         _currentTool = AnnotationTool.Text;
                         PropertyPanel.Visibility = Visibility.Collapsed; // 文字不需要颜色/粗细
                         AnnotationCanvas.MouseLeftButtonDown += TextAnnotation_Click;
+                        break;
+                    case "Mosaic":
+                        _currentTool = AnnotationTool.Mosaic;
+                        ShowPropertyPanelForMosaic(); // 马赛克只需要粗细
                         break;
                 }
             }
@@ -731,14 +891,16 @@ namespace PathSnip
                     _rectThickness = thickness;
                 else if (_currentTool == AnnotationTool.Arrow)
                     _arrowThickness = thickness;
+                else if (_currentTool == AnnotationTool.Mosaic)
+                    _mosaicThickness = thickness;
             }
         }
 
         private void ShowPropertyPanel()
         {
-            if (_currentTool == AnnotationTool.None || _currentTool == AnnotationTool.Text)
+            if (_currentTool == AnnotationTool.None || _currentTool == AnnotationTool.Text || _currentTool == AnnotationTool.Mosaic)
             {
-                // 文字工具不需要属性栏
+                // 文字和马赛克工具不需要标准属性栏
                 PropertyPopup.IsOpen = false;
                 return;
             }
@@ -746,8 +908,16 @@ namespace PathSnip
             // 先关闭再打开，确保位置更新
             PropertyPopup.IsOpen = false;
 
-            // 确保属性面板可见
+            // 确保属性面板可见，颜色和粗细都显示
             PropertyPanel.Visibility = Visibility.Visible;
+
+            // 找到颜色面板并显示
+            var colorPanel = PropertyPanel.Child as System.Windows.Controls.StackPanel;
+            if (colorPanel != null)
+            {
+                colorPanel.Children[0].Visibility = Visibility.Visible; // 颜色选择
+                colorPanel.Children[1].Visibility = Visibility.Visible; // 粗细选择
+            }
 
             // 更新UI显示当前工具的设置
             UpdatePropertyPanelUI();
@@ -781,6 +951,49 @@ namespace PathSnip
             }
         }
 
+        private void ShowPropertyPanelForMosaic()
+        {
+            if (_currentTool != AnnotationTool.Mosaic)
+            {
+                PropertyPopup.IsOpen = false;
+                return;
+            }
+
+            // 先关闭再打开，确保位置更新
+            PropertyPopup.IsOpen = false;
+
+            // 确保属性面板可见
+            PropertyPanel.Visibility = Visibility.Visible;
+
+            // 马赛克只需要粗细（块大小），隐藏颜色选择
+            var colorPanel = PropertyPanel.Child as System.Windows.Controls.StackPanel;
+            if (colorPanel != null)
+            {
+                colorPanel.Children[0].Visibility = Visibility.Collapsed; // 隐藏颜色选择
+                colorPanel.Children[1].Visibility = Visibility.Visible; // 显示粗细选择
+            }
+
+            // 更新粗细选中状态
+            ThicknessThin.IsChecked = _mosaicThickness == AnnotationThickness.Thin;
+            ThicknessMedium.IsChecked = _mosaicThickness == AnnotationThickness.Medium;
+            ThicknessThick.IsChecked = _mosaicThickness == AnnotationThickness.Thick;
+
+            // 定位到马赛克按钮
+            PropertyPopup.PlacementTarget = MosaicToolBtn;
+            PropertyPopup.Placement = PlacementMode.Top;
+
+            var offsetX = -30;
+            var btnPos = MosaicToolBtn.TranslatePoint(new Point(0, 0), this);
+            if (btnPos.X + offsetX < 0)
+                offsetX = (int)(-btnPos.X);
+            else if (btnPos.X + offsetX + 120 > ActualWidth)
+                offsetX = (int)(ActualWidth - btnPos.X - 120);
+
+            PropertyPopup.HorizontalOffset = offsetX;
+            PropertyPopup.VerticalOffset = -10;
+            PropertyPopup.IsOpen = true;
+        }
+
         private void UpdatePropertyPanelUI()
         {
             // 根据当前工具的设置更新UI选中状态
@@ -796,6 +1009,152 @@ namespace PathSnip
             ThicknessThin.IsChecked = thickness == AnnotationThickness.Thin;
             ThicknessMedium.IsChecked = thickness == AnnotationThickness.Medium;
             ThicknessThick.IsChecked = thickness == AnnotationThickness.Thick;
+        }
+
+        #endregion
+
+        #region 选区调整锚点
+
+        private void ShowResizeAnchors()
+        {
+            // 显示8个调整锚点
+            ResizeTopLeft.Visibility = Visibility.Visible;
+            ResizeTopRight.Visibility = Visibility.Visible;
+            ResizeBottomLeft.Visibility = Visibility.Visible;
+            ResizeBottomRight.Visibility = Visibility.Visible;
+            ResizeTop.Visibility = Visibility.Visible;
+            ResizeBottom.Visibility = Visibility.Visible;
+            ResizeLeft.Visibility = Visibility.Visible;
+            ResizeRight.Visibility = Visibility.Visible;
+
+            // 更新锚点位置
+            UpdateResizeAnchors();
+        }
+
+        private void HideResizeAnchors()
+        {
+            // 隐藏所有调整锚点
+            ResizeTopLeft.Visibility = Visibility.Collapsed;
+            ResizeTopRight.Visibility = Visibility.Collapsed;
+            ResizeBottomLeft.Visibility = Visibility.Collapsed;
+            ResizeBottomRight.Visibility = Visibility.Collapsed;
+            ResizeTop.Visibility = Visibility.Collapsed;
+            ResizeBottom.Visibility = Visibility.Collapsed;
+            ResizeLeft.Visibility = Visibility.Collapsed;
+            ResizeRight.Visibility = Visibility.Collapsed;
+        }
+
+        private void UpdateResizeAnchors()
+        {
+            var halfAnchor = 5; // 锚点宽度的一半
+
+            // 四角锚点
+            Canvas.SetLeft(ResizeTopLeft, _currentRect.Left - halfAnchor);
+            Canvas.SetTop(ResizeTopLeft, _currentRect.Top - halfAnchor);
+
+            Canvas.SetLeft(ResizeTopRight, _currentRect.Right - halfAnchor);
+            Canvas.SetTop(ResizeTopRight, _currentRect.Top - halfAnchor);
+
+            Canvas.SetLeft(ResizeBottomLeft, _currentRect.Left - halfAnchor);
+            Canvas.SetTop(ResizeBottomLeft, _currentRect.Bottom - halfAnchor);
+
+            Canvas.SetLeft(ResizeBottomRight, _currentRect.Right - halfAnchor);
+            Canvas.SetTop(ResizeBottomRight, _currentRect.Bottom - halfAnchor);
+
+            // 四边中点锚点
+            Canvas.SetLeft(ResizeTop, _currentRect.Left + _currentRect.Width / 2 - halfAnchor);
+            Canvas.SetTop(ResizeTop, _currentRect.Top - halfAnchor);
+
+            Canvas.SetLeft(ResizeBottom, _currentRect.Left + _currentRect.Width / 2 - halfAnchor);
+            Canvas.SetTop(ResizeBottom, _currentRect.Bottom - halfAnchor);
+
+            Canvas.SetLeft(ResizeLeft, _currentRect.Left - halfAnchor);
+            Canvas.SetTop(ResizeLeft, _currentRect.Top + _currentRect.Height / 2 - halfAnchor);
+
+            Canvas.SetLeft(ResizeRight, _currentRect.Right - halfAnchor);
+            Canvas.SetTop(ResizeRight, _currentRect.Top + _currentRect.Height / 2 - halfAnchor);
+        }
+
+        private void ResizeThumb_DragDelta(object sender, DragDeltaEventArgs e)
+        {
+            var thumb = sender as Thumb;
+            if (thumb == null) return;
+
+            // 拖拽时隐藏工具栏和属性栏
+            Toolbar.Visibility = Visibility.Collapsed;
+            PropertyPopup.IsOpen = false;
+
+            var dx = e.HorizontalChange;
+            var dy = e.VerticalChange;
+
+            // 1. 根据拖拽的锚点，更新"虚拟"边界（允许 Left > Right，这代表发生反向穿透）
+            if (thumb == ResizeTopLeft) { _dragLeft += dx; _dragTop += dy; }
+            else if (thumb == ResizeTopRight) { _dragRight += dx; _dragTop += dy; }
+            else if (thumb == ResizeBottomLeft) { _dragLeft += dx; _dragBottom += dy; }
+            else if (thumb == ResizeBottomRight) { _dragRight += dx; _dragBottom += dy; }
+            else if (thumb == ResizeTop) { _dragTop += dy; }
+            else if (thumb == ResizeBottom) { _dragBottom += dy; }
+            else if (thumb == ResizeLeft) { _dragLeft += dx; }
+            else if (thumb == ResizeRight) { _dragRight += dx; }
+
+            // 2. 重新排列：取最小值作为起点，差值的绝对值作为宽高（完美解决反向穿透翻转）
+            double newLeft = Math.Min(_dragLeft, _dragRight);
+            double newTop = Math.Min(_dragTop, _dragBottom);
+            double newWidth = Math.Abs(_dragRight - _dragLeft);
+            double newHeight = Math.Abs(_dragBottom - _dragTop);
+
+            // 3. 屏幕边界约束
+            if (newLeft < 0) { newWidth += newLeft; newLeft = 0; }
+            if (newTop < 0) { newHeight += newTop; newTop = 0; }
+            if (newLeft + newWidth > Width) newWidth = Width - newLeft;
+            if (newTop + newHeight > Height) newHeight = Height - newTop;
+
+            // 4. 最小尺寸约束
+            if (newWidth < 5) newWidth = 5;
+            if (newHeight < 5) newHeight = 5;
+
+            _currentRect = new Rect(newLeft, newTop, newWidth, newHeight);
+
+            // 5. 更新UI
+            UpdateSelection(_currentRect.TopLeft, _currentRect.BottomRight);
+            UpdateResizeAnchors();
+            AnnotationCanvas.Clip = new RectangleGeometry(_currentRect);
+        }
+
+        private void ResizeThumb_MouseRightButtonDown(object sender, MouseButtonEventArgs e)
+        {
+            // 锚点上的右键点击触发取消选区（Level 2）
+            e.Handled = true;
+            ResetToSelectingState();
+        }
+
+        private void ResizeThumb_DragStarted(object sender, DragStartedEventArgs e)
+        {
+            // 开始拖拽时，记录当前的真实边界
+            _dragLeft = _currentRect.Left;
+            _dragTop = _currentRect.Top;
+            _dragRight = _currentRect.Right;
+            _dragBottom = _currentRect.Bottom;
+
+            // 隐藏工具栏和属性栏
+            Toolbar.Visibility = Visibility.Collapsed;
+            PropertyPopup.IsOpen = false;
+        }
+
+        private void ResizeThumb_DragCompleted(object sender, DragCompletedEventArgs e)
+        {
+            // 拖拽结束后，ShowToolbar 会根据新的 _currentRect 重新定位工具栏
+            ShowToolbar();
+
+            // 如果之前处于某种绘图工具状态，应该恢复显示属性栏
+            if (_currentTool == AnnotationTool.Rectangle || _currentTool == AnnotationTool.Arrow)
+            {
+                ShowPropertyPanel();
+            }
+            else if (_currentTool == AnnotationTool.Mosaic)
+            {
+                ShowPropertyPanelForMosaic();
+            }
         }
 
         #endregion

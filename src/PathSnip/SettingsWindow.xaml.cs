@@ -1,4 +1,5 @@
 using System;
+using System.IO;
 using System.Windows;
 using System.Windows.Input;
 using System.Windows.Forms;
@@ -60,6 +61,9 @@ namespace PathSnip
                     PathFormatComboBox.SelectedIndex = 0;
                     break;
             }
+
+            // 文件名模板
+            FileNameTemplateTextBox.Text = config.FileNameTemplate;
         }
 
         private void HotkeyTextBox_PreviewKeyDown(object sender, System.Windows.Input.KeyEventArgs e)
@@ -161,10 +165,60 @@ namespace PathSnip
         {
             try
             {
+                // ========== 第一步：验证所有输入（先验证，不修改任何内存） ==========
+                
+                // 验证目录
+                var saveDirectory = SaveDirectoryTextBox.Text.Trim();
+                if (string.IsNullOrWhiteSpace(saveDirectory))
+                {
+                    System.Windows.MessageBox.Show("保存目录不能为空。", "PathSnip", MessageBoxButton.OK, MessageBoxImage.Warning);
+                    SaveDirectoryTextBox.Focus();
+                    return;
+                }
+
+                // 验证快捷键
+                var hotkeyText = HotkeyTextBox.Text;
+                if (string.IsNullOrWhiteSpace(hotkeyText) || !hotkeyText.Contains("+"))
+                {
+                    System.Windows.MessageBox.Show("快捷键格式错误。", "PathSnip", MessageBoxButton.OK, MessageBoxImage.Warning);
+                    HotkeyTextBox.Focus();
+                    return;
+                }
+
+                // 验证文件名模板
+                var template = FileNameTemplateTextBox.Text.Trim();
+                var invalidChars = Path.GetInvalidFileNameChars();
+                bool hasInvalidChar = false;
+                foreach (var c in invalidChars)
+                {
+                    if (template.Contains(c.ToString()))
+                    {
+                        hasInvalidChar = true;
+                        break;
+                    }
+                }
+
+                if (hasInvalidChar)
+                {
+                    System.Windows.MessageBox.Show(
+                        "文件名模板包含非法字符（如 \\ / : * ? \" < > |），请修改后重试。",
+                        "PathSnip",
+                        MessageBoxButton.OK,
+                        MessageBoxImage.Warning);
+                    FileNameTemplateTextBox.Focus();
+                    return;
+                }
+
+                if (string.IsNullOrWhiteSpace(template))
+                {
+                    template = "{yyyy}-{MM}-{dd}_{HHmmss}";
+                }
+
+                // ========== 第二步：验证通过后，再修改内存并保存 ==========
+                
                 var config = ConfigService.Instance;
 
                 // 保存快捷键
-                var hotkeyText = HotkeyTextBox.Text;
                 var parts = hotkeyText.Split('+');
                 if (parts.Length >= 2)
                 {
@@ -182,7 +236,7 @@ namespace PathSnip
                 }
 
                 // 保存目录
-                config.SaveDirectory = SaveDirectoryTextBox.Text;
+                config.SaveDirectory = saveDirectory;
 
                 // 保存通知设置
                 config.ShowNotification = ShowNotificationCheckBox.IsChecked == true;
@@ -205,6 +259,9 @@ namespace PathSnip
                 // 保存路径格式
                 var pathFormatTag = (PathFormatComboBox.SelectedItem as System.Windows.Controls.ComboBoxItem).Tag.ToString();
                 config.PathFormat = pathFormatTag;
+
+                // 保存文件名模板
+                config.FileNameTemplate = template;
 
                 config.Save();
 
