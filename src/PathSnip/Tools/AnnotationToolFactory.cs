@@ -13,6 +13,7 @@ namespace PathSnip.Tools
             {
                 AnnotationType.Rectangle => new RectangleTool(),
                 AnnotationType.Arrow => new ArrowTool(),
+                AnnotationType.Text => new TextTool(),
                 // 其他工具待迁移
                 _ => throw new ArgumentException($"Unknown annotation tool type: {type}")
             };

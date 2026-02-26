@@ -697,11 +697,10 @@ namespace PathSnip
                         break;
                     case "Text":
                         _currentTool = AnnotationTool.Text;
-                        // 清除新架构工具
-                        _currentAnnotationTool?.OnDeselected();
-                        _currentAnnotationTool = null;
-                        PropertyPanel.Visibility = Visibility.Collapsed; // 文字不需要颜色/粗细
-                        AnnotationCanvas.MouseLeftButtonDown += TextAnnotation_Click;
+                        // 新架构：创建 TextTool
+                        _currentAnnotationTool = AnnotationToolFactory.Create(AnnotationType.Text);
+                        _currentAnnotationTool.OnSelected(CreateToolContext());
+                        // TextTool 自己处理点击事件
                         break;
                     case "Mosaic":
                         _currentTool = AnnotationTool.Mosaic;
@@ -791,8 +790,6 @@ namespace PathSnip
                 _currentAnnotationTool?.OnDeselected();
                 _currentAnnotationTool = null;
                 PropertyPanel.Visibility = Visibility.Collapsed; // 隐藏属性栏
-                AnnotationCanvas.MouseLeftButtonDown -= TextAnnotation_Click;
-                AnnotationCanvas.MouseLeftButtonDown -= StepAnnotation_Click;
                 _stepCounter = 1; // 重置步骤计数器
             }
         }
