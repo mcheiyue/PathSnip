@@ -17,7 +17,8 @@ namespace PathSnip
         Rectangle,
         Arrow,
         Text,
-        Mosaic
+        Mosaic,
+        Step
     }
 
     public enum AnnotationColor
@@ -41,6 +42,7 @@ namespace PathSnip
         private bool _hasStartedSelection;  // 是否开始过选区（用于右键判断）
         private Rect _currentRect;
         private AnnotationTool _currentTool = AnnotationTool.None;
+        private int _stepCounter = 1; // 步骤序号计数器
         
         // 每个工具独立的颜色和粗细设置
         private AnnotationColor _rectColor = AnnotationColor.Blue;
@@ -119,6 +121,7 @@ namespace PathSnip
                 PropertyPopup.IsOpen = false;
                 
                 _currentTool = AnnotationTool.None;
+                _stepCounter = 1; // 重置步骤序号计数器
                 UpdateToolbarSelection();
                 return;
             }
@@ -147,6 +150,7 @@ namespace PathSnip
             _hasStartedSelection = false;
             Toolbar.Visibility = Visibility.Collapsed;
             AnnotationCanvas.Visibility = Visibility.Collapsed;
+            MosaicCanvas.Visibility = Visibility.Collapsed;
             
             // 隐藏选区相关元素
             SelectionRect.Visibility = Visibility.Collapsed;
@@ -164,8 +168,9 @@ namespace PathSnip
             // 清除当前选区
             _currentRect = Rect.Empty;
             
-            // 清除标注画布和撤销栈（防止幽灵标注）
+            // 清除标注画布、马赛克画布和撤销栈（防止幽灵标注）
             AnnotationCanvas.Children.Clear();
+            MosaicCanvas.Children.Clear();
             _undoStack.Clear();
         }
 
@@ -179,6 +184,7 @@ namespace PathSnip
             // 隐藏所有UI元素
             Toolbar.Visibility = Visibility.Collapsed;
             AnnotationCanvas.Visibility = Visibility.Collapsed;
+            MosaicCanvas.Visibility = Visibility.Collapsed;
             SelectionRect.Visibility = Visibility.Collapsed;
             OuterMask.Visibility = Visibility.Collapsed;
             SizeLabel.Visibility = Visibility.Collapsed;
@@ -194,8 +200,9 @@ namespace PathSnip
             // 清除当前选区
             _currentRect = Rect.Empty;
             
-            // 清除标注画布
+            // 清除标注画布和马赛克画布
             AnnotationCanvas.Children.Clear();
+            MosaicCanvas.Children.Clear();
             _undoStack.Clear();
             
             // 更新工具栏状态
@@ -208,6 +215,8 @@ namespace PathSnip
             RectToolBtn.IsChecked = _currentTool == AnnotationTool.Rectangle;
             ArrowToolBtn.IsChecked = _currentTool == AnnotationTool.Arrow;
             TextToolBtn.IsChecked = _currentTool == AnnotationTool.Text;
+            MosaicToolBtn.IsChecked = _currentTool == AnnotationTool.Mosaic;
+            StepToolBtn.IsChecked = _currentTool == AnnotationTool.Step;
         }
 
         private void OnMouseLeftButtonDown(object sender, MouseButtonEventArgs e)
@@ -286,6 +295,14 @@ namespace PathSnip
             Canvas.SetTop(Toolbar, toolbarTop);
             Toolbar.Visibility = Visibility.Visible;
 
+            // 激活马赛克画布 - 保持全屏不动
+            MosaicCanvas.Visibility = Visibility.Visible;
+            Canvas.SetLeft(MosaicCanvas, 0);
+            Canvas.SetTop(MosaicCanvas, 0);
+            MosaicCanvas.Width = Width;
+            MosaicCanvas.Height = Height;
+            MosaicCanvas.Clip = new RectangleGeometry(_currentRect);
+
             // 激活标注画布 - 保持全屏不动，避免标注位移
             AnnotationCanvas.Visibility = Visibility.Visible;
             Canvas.SetLeft(AnnotationCanvas, 0);
@@ -355,8 +372,8 @@ namespace PathSnip
 
             // 限制起始点在选区内
             _startPoint = e.GetPosition(AnnotationCanvas);
-            _startPoint.X = Math.Max(0, Math.Min(_startPoint.X, AnnotationCanvas.Width));
-            _startPoint.Y = Math.Max(0, Math.Min(_startPoint.Y, AnnotationCanvas.Height));
+            _startPoint.X = Math.Max(_currentRect.Left, Math.Min(_startPoint.X, _currentRect.Right));
+            _startPoint.Y = Math.Max(_currentRect.Top, Math.Min(_startPoint.Y, _currentRect.Bottom));
 
             _isDrawing = true;
 
@@ -394,7 +411,6 @@ namespace PathSnip
             }
             else if (_currentTool == AnnotationTool.Mosaic)
             {
-                // 改用 Polyline 实现自由画笔涂抹
                 var blockSize = GetMosaicBlockSize();
                 var polyline = new Polyline
                 {
@@ -405,7 +421,9 @@ namespace PathSnip
                     StrokeLineJoin = PenLineJoin.Round
                 };
                 polyline.Points.Add(_startPoint);
-                AnnotationCanvas.Children.Add(polyline);
+                
+                // 鼠标事件在 AnnotationCanvas 触发，但图形塞进 MosaicCanvas
+                MosaicCanvas.Children.Add(polyline);
                 _currentDrawingElement = polyline;
             }
 
@@ -566,8 +584,8 @@ namespace PathSnip
             var currentPoint = e.GetPosition(AnnotationCanvas);
 
             // 限制坐标在选区内
-            currentPoint.X = Math.Max(0, Math.Min(currentPoint.X, AnnotationCanvas.Width));
-            currentPoint.Y = Math.Max(0, Math.Min(currentPoint.Y, AnnotationCanvas.Height));
+            currentPoint.X = Math.Max(_currentRect.Left, Math.Min(currentPoint.X, _currentRect.Right));
+            currentPoint.Y = Math.Max(_currentRect.Top, Math.Min(currentPoint.Y, _currentRect.Bottom));
 
             if (_currentTool == AnnotationTool.Rectangle && _currentDrawingElement is Rectangle rect)
             {
@@ -584,8 +602,8 @@ namespace PathSnip
             else if (_currentTool == AnnotationTool.Arrow && _currentDrawingElement is Path arrowPath)
             {
                 // 限制终点在选区内
-                var endX = Math.Max(0, Math.Min(currentPoint.X, AnnotationCanvas.Width));
-                var endY = Math.Max(0, Math.Min(currentPoint.Y, AnnotationCanvas.Height));
+                var endX = Math.Max(_currentRect.Left, Math.Min(currentPoint.X, _currentRect.Right));
+                var endY = Math.Max(_currentRect.Top, Math.Min(currentPoint.Y, _currentRect.Bottom));
                 var thickness = GetCurrentThickness();
                 arrowPath.Data = CreateArrowGeometry(_startPoint.X, _startPoint.Y, endX, endY, thickness);
             }
@@ -640,6 +658,12 @@ namespace PathSnip
                         _currentTool = AnnotationTool.Mosaic;
                         ShowPropertyPanelForMosaic(); // 马赛克只需要粗细
                         break;
+                    case "Step":
+                        _currentTool = AnnotationTool.Step;
+                        _stepCounter = 1; // 选中时重置计数器
+                        PropertyPanel.Visibility = Visibility.Collapsed; // 步骤序号不需要属性栏
+                        AnnotationCanvas.MouseLeftButtonDown += StepAnnotation_Click;
+                        break;
                 }
             }
         }
@@ -652,12 +676,18 @@ namespace PathSnip
                 _currentTool = AnnotationTool.None;
                 PropertyPanel.Visibility = Visibility.Collapsed; // 隐藏属性栏
                 AnnotationCanvas.MouseLeftButtonDown -= TextAnnotation_Click;
+                AnnotationCanvas.MouseLeftButtonDown -= StepAnnotation_Click;
+                _stepCounter = 1; // 重置步骤计数器
             }
         }
 
         private void TextAnnotation_Click(object sender, MouseButtonEventArgs e)
         {
             var pos = e.GetPosition(AnnotationCanvas);
+
+            // 限制文字框位置在选区内（预留50px宽度和20px高度）
+            pos.X = Math.Max(_currentRect.Left, Math.Min(pos.X, _currentRect.Right - 50));
+            pos.Y = Math.Max(_currentRect.Top, Math.Min(pos.Y, _currentRect.Bottom - 20));
 
             // 创建文字输入框
             var textBox = new TextBox
@@ -697,6 +727,52 @@ namespace PathSnip
             };
         }
 
+        private void StepAnnotation_Click(object sender, MouseButtonEventArgs e)
+        {
+            var pos = e.GetPosition(AnnotationCanvas);
+
+            // 限制序号位置在选区内（预留圆形尺寸）
+            pos.X = Math.Max(_currentRect.Left, Math.Min(pos.X, _currentRect.Right - 24));
+            pos.Y = Math.Max(_currentRect.Top, Math.Min(pos.Y, _currentRect.Bottom - 24));
+
+            // 创建步骤序号圆形标签
+            var stepGrid = new Grid
+            {
+                Width = 24,
+                Height = 24,
+                Tag = "StepMarker" // 标记为步骤序号，用于撤销时识别
+            };
+
+            // 圆形背景
+            var ellipse = new Ellipse
+            {
+                Fill = new SolidColorBrush(Color.FromRgb(0, 120, 212)), // 蓝色背景
+                Width = 24,
+                Height = 24
+            };
+
+            // 序号文字
+            var numberText = new TextBlock
+            {
+                Text = _stepCounter.ToString(),
+                Foreground = Brushes.White,
+                FontSize = 12,
+                FontWeight = FontWeights.Bold,
+                HorizontalAlignment = HorizontalAlignment.Center,
+                VerticalAlignment = VerticalAlignment.Center
+            };
+
+            stepGrid.Children.Add(ellipse);
+            stepGrid.Children.Add(numberText);
+
+            Canvas.SetLeft(stepGrid, pos.X);
+            Canvas.SetTop(stepGrid, pos.Y);
+            AnnotationCanvas.Children.Add(stepGrid);
+            _undoStack.Push(stepGrid);
+
+            _stepCounter++; // 递增计数器
+        }
+
         private void UndoBtn_Click(object sender, RoutedEventArgs e)
         {
             // 检查元素是否还在 Canvas 中，如果之前因为文本为空被自动移除了，就跳过它
@@ -705,8 +781,18 @@ namespace PathSnip
                 var element = _undoStack.Pop();
                 if (AnnotationCanvas.Children.Contains(element))
                 {
+                    // 如果撤销的是步骤序号，计数器递减
+                    if (element is Grid grid && grid.Tag?.ToString() == "StepMarker")
+                    {
+                        _stepCounter = Math.Max(1, _stepCounter - 1);
+                    }
                     AnnotationCanvas.Children.Remove(element);
                     break; // 成功撤销一次可见操作，退出
+                }
+                if (MosaicCanvas.Children.Contains(element))
+                {
+                    MosaicCanvas.Children.Remove(element);
+                    break;
                 }
             }
         }
@@ -760,7 +846,28 @@ namespace PathSnip
                     // 把抠出来的背景图画在 (0,0)，使用物理像素尺寸
                     dc.DrawImage(croppedBackground, new Rect(0, 0, physicalWidth, physicalHeight));
 
-                    // 5. 绘制标注层
+                    // 5. 绘制马赛克层（底层）
+                    if (MosaicCanvas.Visibility == Visibility.Visible && MosaicCanvas.Children.Count > 0)
+                    {
+                        dc.PushTransform(new TranslateTransform(-_currentRect.Left, -_currentRect.Top));
+
+                        var mosaicBrush = new VisualBrush(MosaicCanvas)
+                        {
+                            Stretch = Stretch.None,
+                            AlignmentX = AlignmentX.Left,
+                            AlignmentY = AlignmentY.Top,
+                            ViewboxUnits = BrushMappingMode.Absolute,
+                            Viewbox = new Rect(0, 0, ActualWidth, ActualHeight),
+                            ViewportUnits = BrushMappingMode.Absolute,
+                            Viewport = new Rect(0, 0, ActualWidth, ActualHeight)
+                        };
+
+                        dc.DrawRectangle(mosaicBrush, null, new Rect(0, 0, ActualWidth, ActualHeight));
+
+                        dc.Pop();
+                    }
+
+                    // 6. 绘制标注层（顶层）
                     if (AnnotationCanvas.Visibility == Visibility.Visible)
                     {
                         // 将全屏的 AnnotationCanvas 向左上方平移，使其选区部分恰好落入 (0,0)
