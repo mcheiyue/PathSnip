@@ -9,16 +9,21 @@ namespace PathSnip.Tools
     {
         public static IAnnotationTool Create(AnnotationType type)
         {
-            return type switch
+            switch (type)
             {
-                AnnotationType.Rectangle => new RectangleTool(),
-                AnnotationType.Arrow => new ArrowTool(),
-                AnnotationType.Text => new TextTool(),
-                AnnotationType.Mosaic => new MosaicTool(),
-                AnnotationType.StepMarker => new StepMarkerTool(),
-                // 其他工具待迁移
-                _ => throw new ArgumentException($"Unknown annotation tool type: {type}")
-            };
+                case AnnotationType.Rectangle:
+                    return new RectangleTool();
+                case AnnotationType.Arrow:
+                    return new ArrowTool();
+                case AnnotationType.Text:
+                    return new TextTool();
+                case AnnotationType.Mosaic:
+                    return new MosaicTool();
+                case AnnotationType.StepMarker:
+                    return new StepMarkerTool();
+                default:
+                    throw new ArgumentException($"Unknown annotation tool type: {type}");
+            }
         }
     }
 }

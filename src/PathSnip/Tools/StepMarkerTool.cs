@@ -15,8 +15,8 @@ namespace PathSnip.Tools
         public AnnotationType Type => AnnotationType.StepMarker;
         public bool IsStrokeBased => false;
 
-        private AnnotationToolContext? _context;
-        private Grid? _currentStepGrid;
+        private AnnotationToolContext _context;
+        private Grid _currentStepGrid;
 
         public void OnSelected(AnnotationToolContext context)
         {
@@ -85,7 +85,7 @@ namespace PathSnip.Tools
         public void OnMouseUp(Point position)
         {
             // 步骤序号点击即创建
-            OnComplete(action => _context?.PushToUndo(action));
+            OnComplete(action => _context.PushToUndo(action));
 
             _currentStepGrid = null;
         }
@@ -100,9 +100,8 @@ namespace PathSnip.Tools
             if (_currentStepGrid == null || _context == null) return;
 
             var element = _currentStepGrid;
-            var stepNumber = _context.StepCounter - 1; // 记录当前的序号（递增前的值）
 
-            pushToUndo(
+            var undoAction = new UndoAction(
                 // Undo: 从画布移除，计数器递减
                 () =>
                 {
@@ -116,6 +115,7 @@ namespace PathSnip.Tools
                     _context.StepCounter++;
                 }
             );
+            pushToUndo(undoAction);
         }
     }
 }

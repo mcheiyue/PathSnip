@@ -16,32 +16,32 @@ namespace PathSnip.Tools
         /// <summary>
         /// 标注画布（用于矩形、箭头、文字、步骤序号等）
         /// </summary>
-        public Canvas AnnotationCanvas { get; init; }
+        public Canvas AnnotationCanvas { get; set; }
 
         /// <summary>
         /// 马赛克画布（用于马赛克轨迹）
         /// </summary>
-        public Canvas MosaicCanvas { get; init; }
+        public Canvas MosaicCanvas { get; set; }
 
         /// <summary>
         /// 当前选中的颜色
         /// </summary>
-        public Color CurrentColor { get; init; }
+        public Color CurrentColor { get; set; }
 
         /// <summary>
         /// 当前选中的颜色（画刷）
         /// </summary>
-        public Brush CurrentColorBrush { get; init; }
+        public Brush CurrentColorBrush { get; set; }
 
         /// <summary>
         /// 当前选中的粗细
         /// </summary>
-        public double CurrentThickness { get; init; }
+        public double CurrentThickness { get; set; }
 
         /// <summary>
         /// 当前截图选区的边界（用于限制绘制不能超出选区）
         /// </summary>
-        public Rect SelectionBounds { get; init; }
+        public Rect SelectionBounds { get; set; }
 
         /// <summary>
         /// 步骤序号计数器（如需使用）
@@ -51,22 +51,22 @@ namespace PathSnip.Tools
         /// <summary>
         /// 马赛克块大小（用于创建马赛克笔刷）
         /// </summary>
-        public int MosaicBlockSize { get; init; } = 16;
+        public int MosaicBlockSize { get; set; } = 16;
 
         /// <summary>
         /// 预渲染的马赛克背景（用于创建马赛克笔刷）
         /// </summary>
-        public BitmapSource? MosaicBackground { get; init; }
+        public BitmapSource MosaicBackground { get; set; }
 
         /// <summary>
         /// 撤销栈
         /// </summary>
-        public Stack<UndoAction> UndoStack { get; init; } = new();
+        public Stack<UndoAction> UndoStack { get; } = new Stack<UndoAction>();
 
         /// <summary>
         /// 重做栈
         /// </summary>
-        public Stack<UndoAction> RedoStack { get; init; } = new();
+        public Stack<UndoAction> RedoStack { get; } = new Stack<UndoAction>();
 
         /// <summary>
         /// 最大撤销次数

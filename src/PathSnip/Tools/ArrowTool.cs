@@ -14,9 +14,9 @@ namespace PathSnip.Tools
         public AnnotationType Type => AnnotationType.Arrow;
         public bool IsStrokeBased => false;
 
-        private AnnotationToolContext? _context;
+        private AnnotationToolContext _context;
         private Point? _startPoint;
-        private Path? _currentArrow;
+        private Path _currentArrow;
 
         public void OnSelected(AnnotationToolContext context)
         {
@@ -68,7 +68,7 @@ namespace PathSnip.Tools
         public void OnMouseUp(Point position)
         {
             // 箭头已经在 MouseMove 中完成绘制，这里只需要处理撤销栈
-            OnComplete(action => _context?.PushToUndo(action));
+            OnComplete(action => _context.PushToUndo(action));
 
             _currentArrow = null;
             _startPoint = null;
@@ -89,12 +89,13 @@ namespace PathSnip.Tools
             if (_currentArrow == null || _context == null) return;
 
             var element = _currentArrow;
-            pushToUndo(
+            var undoAction = new UndoAction(
                 // Undo: 从画布移除
                 () => _context.AnnotationCanvas.Children.Remove(element),
                 // Redo: 重新添加到画布
                 () => _context.AnnotationCanvas.Children.Add(element)
             );
+            pushToUndo(undoAction);
         }
 
         /// <summary>

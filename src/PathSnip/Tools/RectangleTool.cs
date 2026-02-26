@@ -14,9 +14,9 @@ namespace PathSnip.Tools
         public AnnotationType Type => AnnotationType.Rectangle;
         public bool IsStrokeBased => false;
 
-        private AnnotationToolContext? _context;
+        private AnnotationToolContext _context;
         private Point? _startPoint;
-        private Rectangle? _currentRectangle;
+        private Rectangle _currentRectangle;
 
         public void OnSelected(AnnotationToolContext context)
         {
@@ -78,7 +78,7 @@ namespace PathSnip.Tools
         public void OnMouseUp(Point position)
         {
             // 矩形已经在 MouseMove 中完成绘制，这里只需要处理撤销栈
-            OnComplete(action => _context?.PushToUndo(action));
+            OnComplete(action => _context.PushToUndo(action));
 
             _currentRectangle = null;
             _startPoint = null;
@@ -99,12 +99,13 @@ namespace PathSnip.Tools
             if (_currentRectangle == null || _context == null) return;
 
             var element = _currentRectangle;
-            pushToUndo(
+            var undoAction = new UndoAction(
                 // Undo: 从画布移除
                 () => _context.AnnotationCanvas.Children.Remove(element),
                 // Redo: 重新添加到画布
                 () => _context.AnnotationCanvas.Children.Add(element)
             );
+            pushToUndo(undoAction);
         }
     }
 }

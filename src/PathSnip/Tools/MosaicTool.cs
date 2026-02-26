@@ -15,8 +15,8 @@ namespace PathSnip.Tools
         public AnnotationType Type => AnnotationType.Mosaic;
         public bool IsStrokeBased => true;
 
-        private AnnotationToolContext? _context;
-        private Polyline? _currentPolyline;
+        private AnnotationToolContext _context;
+        private Polyline _currentPolyline;
 
         public void OnSelected(AnnotationToolContext context)
         {
@@ -60,7 +60,7 @@ namespace PathSnip.Tools
         public void OnMouseUp(Point position)
         {
             // 马赛克轨迹已经在 MouseMove 中完成
-            OnComplete(action => _context?.PushToUndo(action));
+            OnComplete(action => _context.PushToUndo(action));
 
             _currentPolyline = null;
         }
@@ -79,12 +79,13 @@ namespace PathSnip.Tools
             if (_currentPolyline == null || _context == null) return;
 
             var element = _currentPolyline;
-            pushToUndo(
+            var undoAction = new UndoAction(
                 // Undo: 从马赛克画布移除
                 () => _context.MosaicCanvas.Children.Remove(element),
                 // Redo: 重新添加到马赛克画布
                 () => _context.MosaicCanvas.Children.Add(element)
             );
+            pushToUndo(undoAction);
         }
     }
 }

@@ -43,8 +43,8 @@ namespace PathSnip
         private bool _hasStartedSelection;  // 是否开始过选区（用于右键判断）
         private Rect _currentRect;
         private AnnotationTool _currentTool = AnnotationTool.None;
-        private IAnnotationTool? _currentAnnotationTool;  // 新架构：当前标注工具
-        private AnnotationToolContext? _toolContext;       // 新架构：工具上下文
+        private IAnnotationTool _currentAnnotationTool;  // 新架构：当前标注工具
+        private AnnotationToolContext _toolContext;       // 新架构：工具上下文
         private int _stepCounter = 1; // 步骤序号计数器
         
         // 每个工具独立的颜色和粗细设置
@@ -386,47 +386,7 @@ namespace PathSnip
             _isDrawing = true;
 
             // 委托给当前标注工具处理
-            _currentAnnotationTool?.OnMouseDown(_startPoint.Value);
-            AnnotationCanvas.CaptureMouse();
-        }
-                Canvas.SetTop(rect, _startPoint.Y);
-                AnnotationCanvas.Children.Add(rect);
-                _currentDrawingElement = rect;
-            }
-            else if (_currentTool == AnnotationTool.Arrow)
-            {
-                var strokeColor = GetCurrentColor();
-                var strokeThickness = GetCurrentThickness();
-                
-                // 创建箭头 - 使用Path绘制
-                var arrowPath = new Path
-                {
-                    Stroke = new SolidColorBrush(strokeColor),
-                    StrokeThickness = strokeThickness,
-                    Fill = new SolidColorBrush(strokeColor),
-                    Data = CreateArrowGeometry(_startPoint.X, _startPoint.Y, _startPoint.X, _startPoint.Y, strokeThickness)
-                };
-                AnnotationCanvas.Children.Add(arrowPath);
-                _currentDrawingElement = arrowPath;
-            }
-            else if (_currentTool == AnnotationTool.Mosaic)
-            {
-                var blockSize = GetMosaicBlockSize();
-                var polyline = new Polyline
-                {
-                    Stroke = CreateMosaicBrush(),
-                    StrokeThickness = blockSize,
-                    StrokeStartLineCap = PenLineCap.Round,
-                    StrokeEndLineCap = PenLineCap.Round,
-                    StrokeLineJoin = PenLineJoin.Round
-                };
-                polyline.Points.Add(_startPoint);
-                
-                // 鼠标事件在 AnnotationCanvas 触发，但图形塞进 MosaicCanvas
-                MosaicCanvas.Children.Add(polyline);
-                _currentDrawingElement = polyline;
-            }
-
+            _currentAnnotationTool?.OnMouseDown(_startPoint);
             AnnotationCanvas.CaptureMouse();
         }
 
@@ -665,20 +625,36 @@ namespace PathSnip
         /// </summary>
         private AnnotationToolContext CreateToolContext()
         {
-            var color = _currentTool switch
+            Color color;
+            switch (_currentTool)
             {
-                AnnotationTool.Rectangle => GetColorFromEnum(_rectColor),
-                AnnotationTool.Arrow => GetColorFromEnum(_arrowColor),
-                _ => Colors.Blue
-            };
+                case AnnotationTool.Rectangle:
+                    color = GetColorFromEnum(_rectColor);
+                    break;
+                case AnnotationTool.Arrow:
+                    color = GetColorFromEnum(_arrowColor);
+                    break;
+                default:
+                    color = Colors.Blue;
+                    break;
+            }
 
-            var thickness = _currentTool switch
+            double thickness;
+            switch (_currentTool)
             {
-                AnnotationTool.Rectangle => GetThicknessValue(_rectThickness),
-                AnnotationTool.Arrow => GetThicknessValue(_arrowThickness),
-                AnnotationTool.Mosaic => GetMosaicBlockSize(),
-                _ => 2.0
-            };
+                case AnnotationTool.Rectangle:
+                    thickness = GetThicknessValue(_rectThickness);
+                    break;
+                case AnnotationTool.Arrow:
+                    thickness = GetThicknessValue(_arrowThickness);
+                    break;
+                case AnnotationTool.Mosaic:
+                    thickness = GetMosaicBlockSize();
+                    break;
+                default:
+                    thickness = 2.0;
+                    break;
+            }
 
             return new AnnotationToolContext
             {
@@ -698,13 +674,17 @@ namespace PathSnip
         /// </summary>
         private Color GetColorFromEnum(AnnotationColor colorEnum)
         {
-            return colorEnum switch
+            switch (colorEnum)
             {
-                AnnotationColor.Blue => Color.FromRgb(0, 120, 212),
-                AnnotationColor.Red => Color.FromRgb(232, 17, 35),
-                AnnotationColor.Black => Colors.Black,
-                _ => Colors.Blue
-            };
+                case AnnotationColor.Blue:
+                    return Color.FromRgb(0, 120, 212);
+                case AnnotationColor.Red:
+                    return Color.FromRgb(232, 17, 35);
+                case AnnotationColor.Black:
+                    return Colors.Black;
+                default:
+                    return Colors.Blue;
+            }
         }
 
         /// <summary>
@@ -712,13 +692,17 @@ namespace PathSnip
         /// </summary>
         private double GetThicknessValue(AnnotationThickness thicknessEnum)
         {
-            return thicknessEnum switch
+            switch (thicknessEnum)
             {
-                AnnotationThickness.Thin => 2,
-                AnnotationThickness.Medium => 4,
-                AnnotationThickness.Thick => 6,
-                _ => 4
-            };
+                case AnnotationThickness.Thin:
+                    return 2;
+                case AnnotationThickness.Medium:
+                    return 4;
+                case AnnotationThickness.Thick:
+                    return 6;
+                default:
+                    return 4;
+            }
         }
 
         private void Tool_Unchecked(object sender, RoutedEventArgs e)

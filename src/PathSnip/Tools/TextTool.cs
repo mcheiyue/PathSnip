@@ -15,9 +15,9 @@ namespace PathSnip.Tools
         public AnnotationType Type => AnnotationType.Text;
         public bool IsStrokeBased => false;
 
-        private AnnotationToolContext? _context;
-        private TextBox? _currentTextBox;
-        private TextBlock? _currentTextBlock;
+        private AnnotationToolContext _context;
+        private TextBox _currentTextBox;
+        private TextBlock _currentTextBlock;
         private Point? _startPoint;
 
         public void OnSelected(AnnotationToolContext context)
@@ -100,12 +100,13 @@ namespace PathSnip.Tools
             if (_currentTextBlock == null || _context == null) return;
 
             var element = _currentTextBlock;
-            pushToUndo(
+            var undoAction = new UndoAction(
                 // Undo: 从画布移除
                 () => _context.AnnotationCanvas.Children.Remove(element),
                 // Redo: 重新添加到画布
                 () => _context.AnnotationCanvas.Children.Add(element)
             );
+            pushToUndo(undoAction);
         }
 
         private void TextBox_LostFocus(object sender, RoutedEventArgs e)
@@ -160,12 +161,13 @@ namespace PathSnip.Tools
 
             // 推入撤销栈
             var textBlock = _currentTextBlock;
-            _context.PushToUndo(
+            var undoAction = new UndoAction(
                 // Undo
                 () => _context.AnnotationCanvas.Children.Remove(textBlock),
                 // Redo
                 () => _context.AnnotationCanvas.Children.Add(textBlock)
             );
+            _context.PushToUndo(undoAction);
 
             _currentTextBox = null;
             _currentTextBlock = null;
