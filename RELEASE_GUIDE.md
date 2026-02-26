@@ -63,7 +63,8 @@ dotnet build src/PathSnip/PathSnip.csproj -c Release
 ### 第四步：提交变更
 
 ```bash
-git add src/PathSnip/PathSnip.csproj CHANGELOG.md
+# 提交所有变更文件（包括代码、模板、资源等）
+git add -A
 git commit -m "chore(release): prepare vX.Y.Z"
 ```
 
