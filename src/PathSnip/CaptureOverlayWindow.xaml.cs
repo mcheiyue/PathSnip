@@ -711,12 +711,10 @@ namespace PathSnip
                         break;
                     case "Step":
                         _currentTool = AnnotationTool.Step;
-                        // 清除新架构工具
-                        _currentAnnotationTool?.OnDeselected();
-                        _currentAnnotationTool = null;
-                        _stepCounter = 1; // 选中时重置计数器
-                        PropertyPanel.Visibility = Visibility.Collapsed; // 步骤序号不需要属性栏
-                        AnnotationCanvas.MouseLeftButtonDown += StepAnnotation_Click;
+                        // 新架构：创建 StepMarkerTool
+                        _currentAnnotationTool = AnnotationToolFactory.Create(AnnotationType.StepMarker);
+                        _currentAnnotationTool.OnSelected(CreateToolContext());
+                        // StepMarkerTool 自己处理点击事件
                         break;
                 }
             }

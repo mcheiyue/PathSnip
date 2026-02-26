@@ -15,6 +15,7 @@ namespace PathSnip.Tools
                 AnnotationType.Arrow => new ArrowTool(),
                 AnnotationType.Text => new TextTool(),
                 AnnotationType.Mosaic => new MosaicTool(),
+                AnnotationType.StepMarker => new StepMarkerTool(),
                 // 其他工具待迁移
                 _ => throw new ArgumentException($"Unknown annotation tool type: {type}")
             };
