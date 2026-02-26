@@ -8,6 +8,7 @@ using System.Windows.Media;
 using System.Windows.Media.Imaging;
 using System.Windows.Shapes;
 using PathSnip.Services;
+using PathSnip.Tools;
 
 namespace PathSnip
 {
@@ -42,6 +43,8 @@ namespace PathSnip
         private bool _hasStartedSelection;  // 是否开始过选区（用于右键判断）
         private Rect _currentRect;
         private AnnotationTool _currentTool = AnnotationTool.None;
+        private IAnnotationTool? _currentAnnotationTool;  // 新架构：当前标注工具
+        private AnnotationToolContext? _toolContext;       // 新架构：工具上下文
         private int _stepCounter = 1; // 步骤序号计数器
         
         // 每个工具独立的颜色和粗细设置
@@ -104,8 +107,13 @@ namespace PathSnip
             // 第零级：取消正在绘制的标注
             if (_isDrawing)
             {
-                // 取消当前正在画的标注
-                if (_currentDrawingElement != null)
+                // 新架构优先：调用工具的 Cancel
+                if (_currentAnnotationTool != null)
+                {
+                    _currentAnnotationTool.Cancel();
+                }
+                // 旧架构：取消当前正在画的标注
+                else if (_currentDrawingElement != null)
                 {
                     AnnotationCanvas.Children.Remove(_currentDrawingElement);
                     _currentDrawingElement = null;
@@ -377,8 +385,18 @@ namespace PathSnip
 
             _isDrawing = true;
 
+            // 新架构优先：如果有当前标注工具，使用新架构
+            if (_currentAnnotationTool != null)
+            {
+                _currentAnnotationTool.OnMouseDown(_startPoint.Value);
+                AnnotationCanvas.CaptureMouse();
+                return;
+            }
+
+            // 旧架构：其他工具使用原有逻辑
             if (_currentTool == AnnotationTool.Rectangle)
             {
+                // 旧逻辑保留，暂不使用新架构
                 var strokeColor = GetCurrentColor();
                 var strokeThickness = GetCurrentThickness();
                 
@@ -587,6 +605,14 @@ namespace PathSnip
             currentPoint.X = Math.Max(_currentRect.Left, Math.Min(currentPoint.X, _currentRect.Right));
             currentPoint.Y = Math.Max(_currentRect.Top, Math.Min(currentPoint.Y, _currentRect.Bottom));
 
+            // 新架构优先：如果有当前标注工具，使用新架构
+            if (_currentAnnotationTool != null)
+            {
+                _currentAnnotationTool.OnMouseMove(currentPoint);
+                return;
+            }
+
+            // 旧架构：其他工具使用原有逻辑
             if (_currentTool == AnnotationTool.Rectangle && _currentDrawingElement is Rectangle rect)
             {
                 var x = Math.Max(0, Math.Min(_startPoint.X, currentPoint.X));
@@ -621,6 +647,20 @@ namespace PathSnip
             _isDrawing = false;
             AnnotationCanvas.ReleaseMouseCapture();
 
+            var currentPoint = e.GetPosition(AnnotationCanvas);
+
+            // 新架构优先：如果有当前标注工具，使用新架构
+            if (_currentAnnotationTool != null)
+            {
+                _currentAnnotationTool.OnMouseUp(currentPoint);
+                _currentAnnotationTool.OnComplete(action => 
+                {
+                    _toolContext?.PushToUndo(action);
+                });
+                return;
+            }
+
+            // 旧架构：其他工具使用原有逻辑
             if (_currentDrawingElement != null)
             {
                 _undoStack.Push(_currentDrawingElement);
@@ -643,23 +683,38 @@ namespace PathSnip
                 {
                     case "Rectangle":
                         _currentTool = AnnotationTool.Rectangle;
+                        // 新架构：创建 RectangleTool
+                        _currentAnnotationTool = AnnotationToolFactory.Create(AnnotationType.Rectangle);
+                        _currentAnnotationTool.OnSelected(CreateToolContext());
                         ShowPropertyPanel(); // 显示属性栏
                         break;
                     case "Arrow":
                         _currentTool = AnnotationTool.Arrow;
+                        // 清除新架构工具
+                        _currentAnnotationTool?.OnDeselected();
+                        _currentAnnotationTool = null;
                         ShowPropertyPanel(); // 显示属性栏
                         break;
                     case "Text":
                         _currentTool = AnnotationTool.Text;
+                        // 清除新架构工具
+                        _currentAnnotationTool?.OnDeselected();
+                        _currentAnnotationTool = null;
                         PropertyPanel.Visibility = Visibility.Collapsed; // 文字不需要颜色/粗细
                         AnnotationCanvas.MouseLeftButtonDown += TextAnnotation_Click;
                         break;
                     case "Mosaic":
                         _currentTool = AnnotationTool.Mosaic;
+                        // 清除新架构工具
+                        _currentAnnotationTool?.OnDeselected();
+                        _currentAnnotationTool = null;
                         ShowPropertyPanelForMosaic(); // 马赛克只需要粗细
                         break;
                     case "Step":
                         _currentTool = AnnotationTool.Step;
+                        // 清除新架构工具
+                        _currentAnnotationTool?.OnDeselected();
+                        _currentAnnotationTool = null;
                         _stepCounter = 1; // 选中时重置计数器
                         PropertyPanel.Visibility = Visibility.Collapsed; // 步骤序号不需要属性栏
                         AnnotationCanvas.MouseLeftButtonDown += StepAnnotation_Click;
@@ -668,12 +723,73 @@ namespace PathSnip
             }
         }
 
+        /// <summary>
+        /// 创建工具上下文（新架构）
+        /// </summary>
+        private AnnotationToolContext CreateToolContext()
+        {
+            var color = _currentTool switch
+            {
+                AnnotationTool.Rectangle => GetColorFromEnum(_rectColor),
+                AnnotationTool.Arrow => GetColorFromEnum(_arrowColor),
+                _ => Colors.Blue
+            };
+
+            var thickness = _currentTool switch
+            {
+                AnnotationTool.Rectangle => GetThicknessValue(_rectThickness),
+                AnnotationTool.Arrow => GetThicknessValue(_arrowThickness),
+                _ => 2.0
+            };
+
+            return new AnnotationToolContext
+            {
+                AnnotationCanvas = AnnotationCanvas,
+                MosaicCanvas = MosaicCanvas,
+                CurrentColor = color,
+                CurrentColorBrush = new SolidColorBrush(color),
+                CurrentThickness = thickness,
+                SelectionBounds = _currentRect
+            };
+        }
+
+        /// <summary>
+        /// 从枚举获取颜色值
+        /// </summary>
+        private Color GetColorFromEnum(AnnotationColor colorEnum)
+        {
+            return colorEnum switch
+            {
+                AnnotationColor.Blue => Color.FromRgb(0, 120, 212),
+                AnnotationColor.Red => Color.FromRgb(232, 17, 35),
+                AnnotationColor.Black => Colors.Black,
+                _ => Colors.Blue
+            };
+        }
+
+        /// <summary>
+        /// 从枚举获取粗细值
+        /// </summary>
+        private double GetThicknessValue(AnnotationThickness thicknessEnum)
+        {
+            return thicknessEnum switch
+            {
+                AnnotationThickness.Thin => 2,
+                AnnotationThickness.Medium => 4,
+                AnnotationThickness.Thick => 6,
+                _ => 4
+            };
+        }
+
         private void Tool_Unchecked(object sender, RoutedEventArgs e)
         {
             if (sender is RadioButton rb)
             {
                 // 取消选中时清除工具
                 _currentTool = AnnotationTool.None;
+                // 清除新架构工具
+                _currentAnnotationTool?.OnDeselected();
+                _currentAnnotationTool = null;
                 PropertyPanel.Visibility = Visibility.Collapsed; // 隐藏属性栏
                 AnnotationCanvas.MouseLeftButtonDown -= TextAnnotation_Click;
                 AnnotationCanvas.MouseLeftButtonDown -= StepAnnotation_Click;
