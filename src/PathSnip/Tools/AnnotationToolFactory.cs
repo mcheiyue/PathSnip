@@ -12,6 +12,7 @@ namespace PathSnip.Tools
             return type switch
             {
                 AnnotationType.Rectangle => new RectangleTool(),
+                AnnotationType.Arrow => new ArrowTool(),
                 // 其他工具待迁移
                 _ => throw new ArgumentException($"Unknown annotation tool type: {type}")
             };

@@ -690,9 +690,9 @@ namespace PathSnip
                         break;
                     case "Arrow":
                         _currentTool = AnnotationTool.Arrow;
-                        // 清除新架构工具
-                        _currentAnnotationTool?.OnDeselected();
-                        _currentAnnotationTool = null;
+                        // 新架构：创建 ArrowTool
+                        _currentAnnotationTool = AnnotationToolFactory.Create(AnnotationType.Arrow);
+                        _currentAnnotationTool.OnSelected(CreateToolContext());
                         ShowPropertyPanel(); // 显示属性栏
                         break;
                     case "Text":
