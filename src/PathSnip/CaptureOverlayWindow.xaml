@@ -185,6 +185,9 @@
         <!-- 背景截图 -->
         <Image x:Name="BackgroundImage" Stretch="None" />
         
+        <!-- 马赛克画布 - 位于背景图之上、标注画布之下 -->
+        <Canvas x:Name="MosaicCanvas" Background="Transparent" Visibility="Collapsed" ClipToBounds="True" />
+        
         <!-- 标注画布 - 必须在遮罩之前，这样选区外的标注会被半透明遮罩盖住 -->
         <Canvas x:Name="AnnotationCanvas" Background="Transparent" Visibility="Collapsed" ClipToBounds="True" />
         
@@ -292,6 +295,8 @@
                              Content="&#xE70F;" ToolTip="文字标注" Checked="Tool_Checked" Unchecked="Tool_Unchecked" Tag="Text" />
                 <RadioButton x:Name="MosaicToolBtn" GroupName="Tools" Style="{StaticResource ToolRadioButtonStyle}"
                              Content="&#xE7B3;" ToolTip="马赛克" Checked="Tool_Checked" Unchecked="Tool_Unchecked" Tag="Mosaic" />
+                <RadioButton x:Name="StepToolBtn" GroupName="Tools" Style="{StaticResource ToolRadioButtonStyle}"
+                             Content="&#xE8EB;" ToolTip="步骤序号" Checked="Tool_Checked" Unchecked="Tool_Unchecked" Tag="Step" />
                 
                 <!-- 分隔线 -->
                 <Rectangle Width="1" Fill="#E0E0E0" Margin="6,4" />
