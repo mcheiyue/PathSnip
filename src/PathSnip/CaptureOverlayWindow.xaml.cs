@@ -107,6 +107,9 @@ namespace PathSnip
                 // 调用工具的 Cancel
                 _currentAnnotationTool?.Cancel();
                 _isDrawing = false;
+                
+                // 解除 WPF 鼠标锁定状态
+                AnnotationCanvas.ReleaseMouseCapture();
                 return;
             }
 
@@ -144,6 +147,13 @@ namespace PathSnip
             _selectionCompleted = false;
             _hasStartedSelection = false;
             Toolbar.Visibility = Visibility.Collapsed;
+            
+            // 彻底重置工具状态，防止幽灵上下文
+            _currentTool = AnnotationTool.None;
+            _currentAnnotationTool?.OnDeselected();
+            _currentAnnotationTool = null;
+            UpdateToolbarSelection();
+            
             AnnotationCanvas.Visibility = Visibility.Collapsed;
             MosaicCanvas.Visibility = Visibility.Collapsed;
             
@@ -177,6 +187,10 @@ namespace PathSnip
             _isSelecting = false;
             _hasStartedSelection = false;
             _currentTool = AnnotationTool.None;
+            
+            // 通知当前工具卸载
+            _currentAnnotationTool?.OnDeselected();
+            _currentAnnotationTool = null;
             
             // 隐藏所有UI元素
             Toolbar.Visibility = Visibility.Collapsed;
