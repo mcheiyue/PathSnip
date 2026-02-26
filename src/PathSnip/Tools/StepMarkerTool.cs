@@ -26,7 +26,7 @@ namespace PathSnip.Tools
 
         public void OnDeselected()
         {
-            _context = null;
+            // 不再设置 _context = null，避免闭包捕获导致撤销时崩溃
             _currentStepGrid = null;
         }
 

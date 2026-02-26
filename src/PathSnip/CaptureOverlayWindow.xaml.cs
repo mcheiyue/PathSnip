@@ -490,11 +490,8 @@ namespace PathSnip
             var currentPoint = e.GetPosition(AnnotationCanvas);
 
             // 委托给当前标注工具处理
+            // 工具类内部已经在 OnMouseUp 中调用 PushToUndo，不需要重复调用
             _currentAnnotationTool?.OnMouseUp(currentPoint);
-            _currentAnnotationTool?.OnComplete(action => 
-            {
-                _toolContext?.PushToUndo(action);
-            });
         }
 
         #endregion

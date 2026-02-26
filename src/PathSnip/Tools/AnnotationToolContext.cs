@@ -81,16 +81,17 @@ namespace PathSnip.Tools
             UndoStack.Push(action);
             RedoStack.Clear();
 
-            // 容量限制
-            while (UndoStack.Count > MaxUndoCount)
+            // 容量限制：当超出最大次数时
+            if (UndoStack.Count > MaxUndoCount)
             {
-                // 移除最旧的项（需要转换为 List 来操作）
-                var items = new List<UndoAction>(UndoStack);
-                items.RemoveAt(0);
+                // Stack.ToArray() 出来的数组，[0]是最新操作，末尾是最老的操作
+                var items = UndoStack.ToArray();
                 UndoStack.Clear();
-                foreach (var item in items)
+                
+                // 丢弃最老的一个（items.Length - 1），把剩下的按从老到新的顺序重新压栈
+                for (int i = MaxUndoCount - 1; i >= 0; i--)
                 {
-                    UndoStack.Push(item);
+                    UndoStack.Push(items[i]);
                 }
             }
         }

@@ -28,7 +28,7 @@ namespace PathSnip.Tools
         public void OnDeselected()
         {
             ConfirmInput();
-            _context = null;
+            // 不再设置 _context = null，避免闭包捕获导致撤销时崩溃
         }
 
         public void OnMouseDown(Point position)
