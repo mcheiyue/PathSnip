@@ -385,28 +385,10 @@ namespace PathSnip
 
             _isDrawing = true;
 
-            // 新架构优先：如果有当前标注工具，使用新架构
-            if (_currentAnnotationTool != null)
-            {
-                _currentAnnotationTool.OnMouseDown(_startPoint.Value);
-                AnnotationCanvas.CaptureMouse();
-                return;
-            }
-
-            // 旧架构：其他工具使用原有逻辑
-            if (_currentTool == AnnotationTool.Rectangle)
-            {
-                // 旧逻辑保留，暂不使用新架构
-                var strokeColor = GetCurrentColor();
-                var strokeThickness = GetCurrentThickness();
-                
-                var rect = new Rectangle
-                {
-                    Stroke = new SolidColorBrush(strokeColor),
-                    StrokeThickness = strokeThickness,
-                    Fill = Brushes.Transparent
-                };
-                Canvas.SetLeft(rect, _startPoint.X);
+            // 委托给当前标注工具处理
+            _currentAnnotationTool?.OnMouseDown(_startPoint.Value);
+            AnnotationCanvas.CaptureMouse();
+        }
                 Canvas.SetTop(rect, _startPoint.Y);
                 AnnotationCanvas.Children.Add(rect);
                 _currentDrawingElement = rect;
@@ -605,39 +587,8 @@ namespace PathSnip
             currentPoint.X = Math.Max(_currentRect.Left, Math.Min(currentPoint.X, _currentRect.Right));
             currentPoint.Y = Math.Max(_currentRect.Top, Math.Min(currentPoint.Y, _currentRect.Bottom));
 
-            // 新架构优先：如果有当前标注工具，使用新架构
-            if (_currentAnnotationTool != null)
-            {
-                _currentAnnotationTool.OnMouseMove(currentPoint);
-                return;
-            }
-
-            // 旧架构：其他工具使用原有逻辑
-            if (_currentTool == AnnotationTool.Rectangle && _currentDrawingElement is Rectangle rect)
-            {
-                var x = Math.Max(0, Math.Min(_startPoint.X, currentPoint.X));
-                var y = Math.Max(0, Math.Min(_startPoint.Y, currentPoint.Y));
-                var width = Math.Min(Math.Abs(currentPoint.X - _startPoint.X), AnnotationCanvas.Width - x);
-                var height = Math.Min(Math.Abs(currentPoint.Y - _startPoint.Y), AnnotationCanvas.Height - y);
-
-                Canvas.SetLeft(rect, x);
-                Canvas.SetTop(rect, y);
-                rect.Width = width;
-                rect.Height = height;
-            }
-            else if (_currentTool == AnnotationTool.Arrow && _currentDrawingElement is Path arrowPath)
-            {
-                // 限制终点在选区内
-                var endX = Math.Max(_currentRect.Left, Math.Min(currentPoint.X, _currentRect.Right));
-                var endY = Math.Max(_currentRect.Top, Math.Min(currentPoint.Y, _currentRect.Bottom));
-                var thickness = GetCurrentThickness();
-                arrowPath.Data = CreateArrowGeometry(_startPoint.X, _startPoint.Y, endX, endY, thickness);
-            }
-            else if (_currentTool == AnnotationTool.Mosaic && _currentDrawingElement is Polyline polyline)
-            {
-                // 自由涂抹：不断添加鼠标经过的轨迹点
-                polyline.Points.Add(currentPoint);
-            }
+            // 委托给当前标注工具处理
+            _currentAnnotationTool?.OnMouseMove(currentPoint);
         }
 
         private void AnnotationCanvas_MouseLeftButtonUp(object sender, MouseButtonEventArgs e)
@@ -649,23 +600,12 @@ namespace PathSnip
 
             var currentPoint = e.GetPosition(AnnotationCanvas);
 
-            // 新架构优先：如果有当前标注工具，使用新架构
-            if (_currentAnnotationTool != null)
+            // 委托给当前标注工具处理
+            _currentAnnotationTool?.OnMouseUp(currentPoint);
+            _currentAnnotationTool?.OnComplete(action => 
             {
-                _currentAnnotationTool.OnMouseUp(currentPoint);
-                _currentAnnotationTool.OnComplete(action => 
-                {
-                    _toolContext?.PushToUndo(action);
-                });
-                return;
-            }
-
-            // 旧架构：其他工具使用原有逻辑
-            if (_currentDrawingElement != null)
-            {
-                _undoStack.Push(_currentDrawingElement);
-                _currentDrawingElement = null;
-            }
+                _toolContext?.PushToUndo(action);
+            });
         }
 
         #endregion
