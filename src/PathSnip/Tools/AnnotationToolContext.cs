@@ -1,0 +1,136 @@
+using System;
+using System.Collections.Generic;
+using System.Windows;
+using System.Windows.Controls;
+using System.Windows.Media;
+
+namespace PathSnip.Tools
+{
+    /// <summary>
+    /// 标注工具上下文环境
+    /// 封装绘图所需的画布、样式、边界等信息
+    /// </summary>
+    public class AnnotationToolContext
+    {
+        /// <summary>
+        /// 标注画布（用于矩形、箭头、文字、步骤序号等）
+        /// </summary>
+        public Canvas AnnotationCanvas { get; init; }
+
+        /// <summary>
+        /// 马赛克画布（用于马赛克轨迹）
+        /// </summary>
+        public Canvas MosaicCanvas { get; init; }
+
+        /// <summary>
+        /// 当前选中的颜色
+        /// </summary>
+        public Color CurrentColor { get; init; }
+
+        /// <summary>
+        /// 当前选中的颜色（画刷）
+        /// </summary>
+        public Brush CurrentColorBrush { get; init; }
+
+        /// <summary>
+        /// 当前选中的粗细
+        /// </summary>
+        public double CurrentThickness { get; init; }
+
+        /// <summary>
+        /// 当前截图选区的边界（用于限制绘制不能超出选区）
+        /// </summary>
+        public Rect SelectionBounds { get; init; }
+
+        /// <summary>
+        /// 步骤序号计数器（如需使用）
+        /// </summary>
+        public int StepCounter { get; set; } = 1;
+
+        /// <summary>
+        /// 撤销栈
+        /// </summary>
+        public Stack<UndoAction> UndoStack { get; init; } = new();
+
+        /// <summary>
+        /// 重做栈
+        /// </summary>
+        public Stack<UndoAction> RedoStack { get; init; } = new();
+
+        /// <summary>
+        /// 最大撤销次数
+        /// </summary>
+        public const int MaxUndoCount = 50;
+
+        /// <summary>
+        /// 将撤销/重做操作推入栈
+        /// </summary>
+        public void PushToUndo(UndoAction action)
+        {
+            UndoStack.Push(action);
+            RedoStack.Clear();
+
+            // 容量限制
+            while (UndoStack.Count > MaxUndoCount)
+            {
+                // 移除最旧的项（需要转换为 List 来操作）
+                var items = new List<UndoAction>(UndoStack);
+                items.RemoveAt(0);
+                UndoStack.Clear();
+                foreach (var item in items)
+                {
+                    UndoStack.Push(item);
+                }
+            }
+        }
+
+        /// <summary>
+        /// 执行撤销
+        /// </summary>
+        public void Undo()
+        {
+            if (UndoStack.Count > 0)
+            {
+                var action = UndoStack.Pop();
+                action.Undo();
+                RedoStack.Push(action);
+            }
+        }
+
+        /// <summary>
+        /// 执行重做
+        /// </summary>
+        public void Redo()
+        {
+            if (RedoStack.Count > 0)
+            {
+                var action = RedoStack.Pop();
+                action.Redo();
+                UndoStack.Push(action);
+            }
+        }
+
+        /// <summary>
+        /// 将点限制在选区边界内
+        /// </summary>
+        public Point ClampToBounds(Point point)
+        {
+            var x = Math.Max(SelectionBounds.Left, Math.Min(SelectionBounds.Right, point.X));
+            var y = Math.Max(SelectionBounds.Top, Math.Min(SelectionBounds.Bottom, point.Y));
+            return new Point(x, y);
+        }
+
+        /// <summary>
+        /// 将矩形限制在选区边界内
+        /// </summary>
+        public Rect ClampRectToBounds(Rect rect)
+        {
+            var x = Math.Max(SelectionBounds.Left, rect.X);
+            var y = Math.Max(SelectionBounds.Top, rect.Y);
+            var right = Math.Min(SelectionBounds.Right, rect.Right);
+            var bottom = Math.Min(SelectionBounds.Bottom, rect.Bottom);
+
+            return new Rect(x, y, Math.Max(0, right - x), Math.Max(0, bottom - y));
+        }
+    }
+}
