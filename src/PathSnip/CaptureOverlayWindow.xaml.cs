@@ -516,13 +516,11 @@ namespace PathSnip
         {
             if (sender is RadioButton rb && rb.Tag is string toolName)
             {
-                // 更新上下文样式
-                UpdateToolContextStyle();
-
                 switch (toolName)
                 {
                     case "Rectangle":
                         _currentTool = AnnotationTool.Rectangle;
+                        UpdateToolContextStyle();
                         // 新架构：创建 RectangleTool
                         _currentAnnotationTool = AnnotationToolFactory.Create(AnnotationType.Rectangle);
                         _currentAnnotationTool.OnSelected(_toolContext);
@@ -530,6 +528,7 @@ namespace PathSnip
                         break;
                     case "Arrow":
                         _currentTool = AnnotationTool.Arrow;
+                        UpdateToolContextStyle();
                         // 新架构：创建 ArrowTool
                         _currentAnnotationTool = AnnotationToolFactory.Create(AnnotationType.Arrow);
                         _currentAnnotationTool.OnSelected(_toolContext);
@@ -537,6 +536,7 @@ namespace PathSnip
                         break;
                     case "Text":
                         _currentTool = AnnotationTool.Text;
+                        UpdateToolContextStyle();
                         // 新架构：创建 TextTool
                         _currentAnnotationTool = AnnotationToolFactory.Create(AnnotationType.Text);
                         _currentAnnotationTool.OnSelected(_toolContext);
@@ -544,6 +544,7 @@ namespace PathSnip
                         break;
                     case "Mosaic":
                         _currentTool = AnnotationTool.Mosaic;
+                        UpdateToolContextStyle();
                         // 新架构：创建 MosaicTool
                         _currentAnnotationTool = AnnotationToolFactory.Create(AnnotationType.Mosaic);
                         _currentAnnotationTool.OnSelected(_toolContext);
@@ -551,6 +552,7 @@ namespace PathSnip
                         break;
                     case "Step":
                         _currentTool = AnnotationTool.Step;
+                        UpdateToolContextStyle();
                         // 新架构：创建 StepMarkerTool
                         _currentAnnotationTool = AnnotationToolFactory.Create(AnnotationType.StepMarker);
                         _currentAnnotationTool.OnSelected(_toolContext);
