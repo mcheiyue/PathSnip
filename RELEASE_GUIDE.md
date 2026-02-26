@@ -8,7 +8,7 @@
 3. **中文优先**: 所有对外发布的文档必须使用简体中文。
 4. **原子化**: 发布相关的文档变更应单独提交，commit message 固定格式。
 
-## 详细发布步骤
+## 发布步骤
 
 ### 第一步：本地构建验证
 
@@ -25,21 +25,40 @@ dotnet build src/PathSnip/PathSnip.csproj -c Release
 检查并更新：
 - **src/PathSnip/PathSnip.csproj**: 更新 `<Version>`、`<AssemblyVersion>`、`<FileVersion>`
 
-### 第三步：更新变更日志 (CHANGELOG.md)
+### 第三步：撰写更新日志
 
-在 `CHANGELOG.md` 顶部添加新版本区块。
+在 `CHANGELOG.md` 顶部添加新版本区块，**必须严格按照模板格式**：
 
-**风格指南**:
-1. **标题格式**: `## [vX.Y.Z] - YYYY-MM-DD`
-2. **分类标题**:
-   - `### ⚠️ 重大变更 (Breaking Changes)`
-   - `### ✨ 新特性 (Features)`
-   - `### 🐛 问题修复 (Bug Fixes)`
-   - `### 🚀 优化 (Optimizations)`
-   - `### 🧹 清理 (Cleanup)`
-3. **列表项格式**:
-   - 统一使用 `*` 作为列表符
-   - 关键词导向 + 详细描述
+```markdown
+## [vX.Y.Z] - YYYY-MM-DD
+
+> **[SYS_MSG]** 本次更新简要说明。
+> **[METRICS]** Binary: 830KB (-5%) | Startup: -12ms
+
+### 💻 终端与工作流
+* **[关键词]** 描述（可选）
+
+### ✨ 新特性
+* **功能名称** - 详细描述
+
+### 🐛 问题修复
+* `[模块]` 问题描述 - 详细描述
+
+### ⚙️ 优化与重构
+* `[模块]` 优化说明 - 详细描述
+```
+
+**分类顺序（固定）**:
+1. `### 💻 终端与工作流` - 终端、CLI、工作流相关
+2. `### ✨ 新特性` - 新增功能
+3. `### 🐛 问题修复` - Bug 修复
+4. `### ⚙️ 优化与重构` - 性能优化、重构、清理
+
+**子标签（可选）**:
+- `[UI]` - UI 相关
+- `[Core]` - 核心逻辑
+- `[Perf]` - 性能相关
+- `[Build]` - 构建相关
 
 ### 第四步：提交变更
 
@@ -66,6 +85,13 @@ git push origin main --tags
 1. 不修改代码库历史
 2. 使用 GitHub CLI 修正线上 Release Note：
    ```bash
-   gh release edit vX.Y.Z --notes "新内容"
+   gh release edit vX.Y.Z --title "vX.Y.Z" --notes-file - <<'EOF'
+   ## [vX.Y.Z] - YYYY-MM-DD
+   
+   > **[SYS_MSG]** ...
+   
+   ### ✨ 新特性
+   ...
+   EOF
    ```
 3. 在 `main` 分支补交修正后的 `CHANGELOG.md`
