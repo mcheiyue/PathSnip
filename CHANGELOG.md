@@ -2,6 +2,41 @@
 
 All notable changes to this project will be documented in this file.
 
+## [v1.0.8] - 2026-02-27
+
+> **[SYS_MSG]** 标注工具架构重构，采用策略模式实现高内聚低耦合。
+> **[METRICS]** Binary: <1MB
+
+### ✨ 新特性
+* **架构重构** - 标注工具采用策略模式，实现高内聚低耦合
+  * 新增 IAnnotationTool 接口，定义工具行为契约
+  * 新增 AnnotationToolContext，封装绘图环境
+  * 新增 AnnotationToolFactory，工厂模式创建工具
+  * 新增 UndoAction，支持多画布撤销/重做
+
+### 🔧 重构优化
+* **工具独立化** - 每个标注工具拆分为独立类
+  * RectangleTool：矩形标注
+  * ArrowTool：箭头标注（含几何计算）
+  * TextTool：文字标注（含TextBox交互）
+  * MosaicTool：马赛克标注（含轨迹绘制）
+  * StepMarkerTool：步骤序号标注
+* **主窗口精简** - CaptureOverlayWindow.xaml.cs 从 ~1400 行精简至 ~1000 行
+* **代码清理** - 删除废弃方法（CreateArrowGeometry、CreateMosaicBrush等）
+
+### 🐛 问题修复
+* `[重构]` **撤销功能失效** - 改用 _toolContext.Undo()
+* `[重构]` **文字工具失效** - 移除 MouseDown 对 Text 类型的拦截
+* `[重构]` **上下文频繁重建** - ShowToolbar 全局初始化 Context
+* `[重构]` **切换颜色不生效** - 实时更新 Context 样式
+* `[重构]` **闭包捕获陷阱** - 删除工具类 OnDeselected 中的 _context = null
+* `[重构]` **撤销栈容量限制** - 修正 PushToUndo 方法的索引逻辑
+* `[重构]` **重复调用 OnComplete** - 删除主窗口 MouseUp 中的冗余调用
+* `[重构]` **幽灵上下文** - ResetToSelectingState/ResetToInitialState 清理工具状态
+* `[重构]` **鼠标锁死** - 右键取消时释放鼠标捕获
+* `[重构]` **步骤序号重置** - OnSelected 中重新添加计数器重置
+* `[重构]` **颜色时序问题** - Tool_Checked 中调整 UpdateToolContextStyle 调用顺序
+
 ## [v1.0.7] - 2026-02-26
 
 > **[SYS_MSG]** 新增步骤序号标注工具，修复马赛克覆盖和标注溢出选区问题。
