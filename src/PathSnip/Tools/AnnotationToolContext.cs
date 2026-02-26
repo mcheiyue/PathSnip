@@ -167,5 +167,16 @@ namespace PathSnip.Tools
                 ViewportUnits = BrushMappingMode.Absolute
             };
         }
+
+        /// <summary>
+        /// 更新当前样式（颜色、粗细等）
+        /// </summary>
+        public void UpdateStyle(Color color, double thickness, int mosaicBlockSize)
+        {
+            CurrentColor = color;
+            CurrentColorBrush = new SolidColorBrush(color);
+            CurrentThickness = thickness;
+            MosaicBlockSize = mosaicBlockSize;
+        }
     }
 }

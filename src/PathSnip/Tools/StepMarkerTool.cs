@@ -21,7 +21,7 @@ namespace PathSnip.Tools
         public void OnSelected(AnnotationToolContext context)
         {
             _context = context;
-            _context.StepCounter = 1; // 选中时重置计数器
+            // 不再每次选中都重置计数器，保持连续递增
         }
 
         public void OnDeselected()
