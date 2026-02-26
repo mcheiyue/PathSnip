@@ -704,9 +704,9 @@ namespace PathSnip
                         break;
                     case "Mosaic":
                         _currentTool = AnnotationTool.Mosaic;
-                        // 清除新架构工具
-                        _currentAnnotationTool?.OnDeselected();
-                        _currentAnnotationTool = null;
+                        // 新架构：创建 MosaicTool
+                        _currentAnnotationTool = AnnotationToolFactory.Create(AnnotationType.Mosaic);
+                        _currentAnnotationTool.OnSelected(CreateToolContext());
                         ShowPropertyPanelForMosaic(); // 马赛克只需要粗细
                         break;
                     case "Step":
@@ -738,6 +738,7 @@ namespace PathSnip
             {
                 AnnotationTool.Rectangle => GetThicknessValue(_rectThickness),
                 AnnotationTool.Arrow => GetThicknessValue(_arrowThickness),
+                AnnotationTool.Mosaic => GetMosaicBlockSize(),
                 _ => 2.0
             };
 
@@ -748,7 +749,9 @@ namespace PathSnip
                 CurrentColor = color,
                 CurrentColorBrush = new SolidColorBrush(color),
                 CurrentThickness = thickness,
-                SelectionBounds = _currentRect
+                SelectionBounds = _currentRect,
+                MosaicBlockSize = (int)thickness,
+                MosaicBackground = _mosaicBackground
             };
         }
 

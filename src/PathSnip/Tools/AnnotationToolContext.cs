@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Media;
+using System.Windows.Media.Imaging;
 
 namespace PathSnip.Tools
 {
@@ -46,6 +47,16 @@ namespace PathSnip.Tools
         /// 步骤序号计数器（如需使用）
         /// </summary>
         public int StepCounter { get; set; } = 1;
+
+        /// <summary>
+        /// 马赛克块大小（用于创建马赛克笔刷）
+        /// </summary>
+        public int MosaicBlockSize { get; init; } = 16;
+
+        /// <summary>
+        /// 预渲染的马赛克背景（用于创建马赛克笔刷）
+        /// </summary>
+        public BitmapSource? MosaicBackground { get; init; }
 
         /// <summary>
         /// 撤销栈
@@ -131,6 +142,30 @@ namespace PathSnip.Tools
             var bottom = Math.Min(SelectionBounds.Bottom, rect.Bottom);
 
             return new Rect(x, y, Math.Max(0, right - x), Math.Max(0, bottom - y));
+        }
+
+        /// <summary>
+        /// 创建马赛克笔刷
+        /// </summary>
+        public Brush CreateMosaicBrush()
+        {
+            // 如果预渲染失败，做个保底
+            if (MosaicBackground == null)
+            {
+                return Brushes.Gray;
+            }
+
+            // 使用 ImageBrush，把全屏的马赛克底图作为画笔的"颜料"
+            return new ImageBrush(MosaicBackground)
+            {
+                Stretch = Stretch.None,
+                AlignmentX = AlignmentX.Left,
+                AlignmentY = AlignmentY.Top,
+                Viewbox = new Rect(0, 0, MosaicBackground.Width, MosaicBackground.Height),
+                ViewboxUnits = BrushMappingMode.Absolute,
+                Viewport = new Rect(0, 0, MosaicBackground.Width, MosaicBackground.Height),
+                ViewportUnits = BrushMappingMode.Absolute
+            };
         }
     }
 }
