@@ -45,21 +45,21 @@ namespace PathSnip
         private AnnotationTool _currentTool = AnnotationTool.None;
         private IAnnotationTool _currentAnnotationTool;  // 新架构：当前标注工具
         private AnnotationToolContext _toolContext;       // 新架构：工具上下文
-        
+
         // 每个工具独立的颜色和粗细设置
         private AnnotationColor _rectColor = AnnotationColor.Blue;
         private AnnotationThickness _rectThickness = AnnotationThickness.Medium;
         private AnnotationColor _arrowColor = AnnotationColor.Blue;
         private AnnotationThickness _arrowThickness = AnnotationThickness.Medium;
         private AnnotationThickness _mosaicThickness = AnnotationThickness.Medium;
-        
+
         // 记录拖拽开始时的四个虚拟边界（用于反向拖拽翻转）
         private double _dragLeft, _dragTop, _dragRight, _dragBottom;
-        
+
         // 记录鼠标相对于锚点的偏移量（用于绝对坐标拖拽）
         private double _mouseOffsetX;
         private double _mouseOffsetY;
-        
+
         private bool _isDrawing;
         private bool _selectionCompleted;
 
@@ -107,7 +107,7 @@ namespace PathSnip
                 // 调用工具的 Cancel
                 _currentAnnotationTool?.Cancel();
                 _isDrawing = false;
-                
+
                 // 解除 WPF 鼠标锁定状态
                 AnnotationCanvas.ReleaseMouseCapture();
                 return;
@@ -118,7 +118,7 @@ namespace PathSnip
             {
                 // 关闭气泡面板
                 PropertyPopup.IsOpen = false;
-                
+
                 _currentTool = AnnotationTool.None;
                 UpdateToolbarSelection();
                 return;
@@ -147,36 +147,36 @@ namespace PathSnip
             _selectionCompleted = false;
             _hasStartedSelection = false;
             Toolbar.Visibility = Visibility.Collapsed;
-            
+
             // 彻底重置工具状态，防止幽灵上下文
             _currentTool = AnnotationTool.None;
             _currentAnnotationTool?.OnDeselected();
             _currentAnnotationTool = null;
             UpdateToolbarSelection();
-            
+
             AnnotationCanvas.Visibility = Visibility.Collapsed;
             MosaicCanvas.Visibility = Visibility.Collapsed;
-            
+
             // 隐藏选区相关元素
             SelectionRect.Visibility = Visibility.Collapsed;
             OuterMask.Visibility = Visibility.Collapsed;
             SizeLabel.Visibility = Visibility.Collapsed;
-            
+
             // 隐藏调整锚点
             HideResizeAnchors();
-            
+
             // 恢复初始状态
             SelectionRect.IsHitTestVisible = true;
             SizeLabel.IsHitTestVisible = true;
             HintText.Visibility = Visibility.Visible;
-            
+
             // 清除当前选区
             _currentRect = Rect.Empty;
-            
+
             // 清除标注画布、马赛克画布和撤销栈（防止幽灵标注）
             AnnotationCanvas.Children.Clear();
             MosaicCanvas.Children.Clear();
-            
+
             // 销毁上下文，下次框选重新生成干净的
             _toolContext = null;
         }
@@ -187,11 +187,11 @@ namespace PathSnip
             _isSelecting = false;
             _hasStartedSelection = false;
             _currentTool = AnnotationTool.None;
-            
+
             // 通知当前工具卸载
             _currentAnnotationTool?.OnDeselected();
             _currentAnnotationTool = null;
-            
+
             // 隐藏所有UI元素
             Toolbar.Visibility = Visibility.Collapsed;
             AnnotationCanvas.Visibility = Visibility.Collapsed;
@@ -200,24 +200,24 @@ namespace PathSnip
             OuterMask.Visibility = Visibility.Collapsed;
             SizeLabel.Visibility = Visibility.Collapsed;
             HideResizeAnchors();
-            
+
             // 显示提示文字
             HintText.Visibility = Visibility.Visible;
-            
+
             // 恢复可交互性
             SelectionRect.IsHitTestVisible = true;
             SizeLabel.IsHitTestVisible = true;
-            
+
             // 清除当前选区
             _currentRect = Rect.Empty;
-            
+
             // 清除标注画布和马赛克画布
             AnnotationCanvas.Children.Clear();
             MosaicCanvas.Children.Clear();
-            
+
             // 销毁上下文
             _toolContext = null;
-            
+
             // 更新工具栏状态
             UpdateToolbarSelection();
         }
@@ -322,7 +322,7 @@ namespace PathSnip
             Canvas.SetTop(AnnotationCanvas, 0);
             AnnotationCanvas.Width = Width;
             AnnotationCanvas.Height = Height;
-            
+
             // 设置裁剪区域，使标注只显示在选区内
             AnnotationCanvas.Clip = new RectangleGeometry(_currentRect);
 
@@ -521,47 +521,43 @@ namespace PathSnip
                     case "Rectangle":
                         _currentTool = AnnotationTool.Rectangle;
                         UpdateToolContextStyle();
-                        // 新架构：创建 RectangleTool
                         _currentAnnotationTool = AnnotationToolFactory.Create(AnnotationType.Rectangle);
                         _currentAnnotationTool.OnSelected(_toolContext);
-                        ShowPropertyPanel(); // 显示属性栏
+                        ShowPropertyPanel();
                         break;
                     case "Arrow":
                         _currentTool = AnnotationTool.Arrow;
                         UpdateToolContextStyle();
-                        // 新架构：创建 ArrowTool
                         _currentAnnotationTool = AnnotationToolFactory.Create(AnnotationType.Arrow);
                         _currentAnnotationTool.OnSelected(_toolContext);
-                        ShowPropertyPanel(); // 显示属性栏
+                        ShowPropertyPanel();
                         break;
                     case "Text":
                         _currentTool = AnnotationTool.Text;
                         UpdateToolContextStyle();
-                        // 新架构：创建 TextTool
                         _currentAnnotationTool = AnnotationToolFactory.Create(AnnotationType.Text);
                         _currentAnnotationTool.OnSelected(_toolContext);
-                        // TextTool 自己处理点击事件
+                        // 【核心修改】文字工具不需要属性栏，显式关闭
+                        PropertyPopup.IsOpen = false;
                         break;
                     case "Mosaic":
                         _currentTool = AnnotationTool.Mosaic;
                         UpdateToolContextStyle();
-                        // 新架构：创建 MosaicTool
                         _currentAnnotationTool = AnnotationToolFactory.Create(AnnotationType.Mosaic);
                         _currentAnnotationTool.OnSelected(_toolContext);
-                        ShowPropertyPanelForMosaic(); // 马赛克只需要粗细
+                        ShowPropertyPanelForMosaic();
                         break;
                     case "Step":
                         _currentTool = AnnotationTool.Step;
                         UpdateToolContextStyle();
-                        // 新架构：创建 StepMarkerTool
                         _currentAnnotationTool = AnnotationToolFactory.Create(AnnotationType.StepMarker);
                         _currentAnnotationTool.OnSelected(_toolContext);
-                        // StepMarkerTool 自己处理点击事件
+                        // 【核心修改】步骤工具不需要属性栏，显式关闭
+                        PropertyPopup.IsOpen = false;
                         break;
                 }
             }
         }
-
         /// <summary>
         /// 更新工具上下文的样式（颜色、粗细等）
         /// </summary>
@@ -694,10 +690,10 @@ namespace PathSnip
             {
                 // 取消选中时清除工具
                 _currentTool = AnnotationTool.None;
-                // 清除新架构工具
                 _currentAnnotationTool?.OnDeselected();
                 _currentAnnotationTool = null;
-                PropertyPanel.Visibility = Visibility.Collapsed; // 隐藏属性栏
+
+                // 【核心修改】不要在这里写 PropertyPopup.IsOpen = false; 或任何折叠代码！
             }
         }
 
@@ -788,7 +784,7 @@ namespace PathSnip
                             Stretch = Stretch.None, // 绝对不拉伸
                             AlignmentX = AlignmentX.Left,
                             AlignmentY = AlignmentY.Top,
-                            
+
                             // ================= 【核心修复在这里】 =================
                             // 必须强制指定绝对视图区！
                             // 拒绝 VisualBrush 自动裁剪内容边界，强行捕获全屏坐标系，防止产生双倍偏移！
@@ -879,7 +875,7 @@ namespace PathSnip
                         color = AnnotationColor.Black;
                         break;
                 }
-                
+
                 // 保存到当前工具的属性
                 if (_currentTool == AnnotationTool.Rectangle)
                     _rectColor = color;
@@ -911,7 +907,7 @@ namespace PathSnip
                         thickness = AnnotationThickness.Thick;
                         break;
                 }
-                
+
                 // 保存到当前工具的属性
                 if (_currentTool == AnnotationTool.Rectangle)
                     _rectThickness = thickness;
@@ -927,93 +923,68 @@ namespace PathSnip
 
         private void ShowPropertyPanel()
         {
-            if (_currentTool == AnnotationTool.None || _currentTool == AnnotationTool.Text || _currentTool == AnnotationTool.Mosaic)
-            {
-                PropertyPopup.IsOpen = false;
-                return;
-            }
-
-            // 1. 先关闭
-            PropertyPopup.IsOpen = false;
-
-            // 2. 动态获取面板并确保外层容器和子元素都是可见的
+            // 1. 设置内容可见性
             var border = PropertyPopup.Child as System.Windows.Controls.Border;
             if (border != null) border.Visibility = Visibility.Visible;
 
             var colorPanel = border?.Child as System.Windows.Controls.StackPanel;
             if (colorPanel != null)
             {
-                colorPanel.Visibility = Visibility.Visible;
-                colorPanel.Children[0].Visibility = Visibility.Visible; // 显示颜色选择
-                colorPanel.Children[1].Visibility = Visibility.Visible; // 显示粗细选择
+                colorPanel.Children[0].Visibility = Visibility.Visible; // 颜色
+                colorPanel.Children[1].Visibility = Visibility.Visible; // 粗细
             }
 
-            // 更新UI显示当前工具的设置
+            // 2. 更新UI
             UpdatePropertyPanelUI();
 
-            // 3. 定位逻辑
+            // 3. 定位
             RadioButton currentToolBtn = null;
-            if (_currentTool == AnnotationTool.Rectangle)
-                currentToolBtn = RectToolBtn;
-            else if (_currentTool == AnnotationTool.Arrow)
-                currentToolBtn = ArrowToolBtn;
+            if (_currentTool == AnnotationTool.Rectangle) currentToolBtn = RectToolBtn;
+            else if (_currentTool == AnnotationTool.Arrow) currentToolBtn = ArrowToolBtn;
 
             if (currentToolBtn != null)
             {
                 PropertyPopup.PlacementTarget = currentToolBtn;
                 PropertyPopup.Placement = PlacementMode.Top;
-                
+
                 var offsetX = -30;
                 var btnPos = currentToolBtn.TranslatePoint(new Point(0, 0), this);
                 if (btnPos.X + offsetX < 0) offsetX = (int)(-btnPos.X);
                 else if (btnPos.X + offsetX + 120 > ActualWidth) offsetX = (int)(ActualWidth - btnPos.X - 120);
-                
+
                 PropertyPopup.HorizontalOffset = offsetX;
                 PropertyPopup.VerticalOffset = -10;
             }
 
-            // 强制测量内部元素的最新尺寸
-            PropertyPanel.UpdateLayout();
-
-            // 4. 先打开 Popup（此时会生成底层的 HWND 窗口）
-            PropertyPopup.IsOpen = true;
-
-            // 5. 【核心修复】在打开状态下重置 Child
-            // 这会触发底层 DestroyWindow 和 CreateWindow，彻底根据最新尺寸重绘，杜绝任何尺寸残留！
-            var child = PropertyPopup.Child;
-            PropertyPopup.Child = null;
-            PropertyPopup.Child = child;
-        }
-
-        private void ShowPropertyPanelForMosaic()
-        {
-            if (_currentTool != AnnotationTool.Mosaic)
+            // 4. 【核心修复】：如果是关闭的，打开它；如果本来就是打开的（从马赛克切过来），利用位移抖动强制 WPF 重新计算高度
+            if (!PropertyPopup.IsOpen)
             {
-                PropertyPopup.IsOpen = false;
-                return;
+                PropertyPopup.IsOpen = true;
             }
 
-            // 1. 先关闭
-            PropertyPopup.IsOpen = false;
-
-            // 2. 动态获取面板
+            // 轻微抖动 Offset 强制底层 HWND 根据现有的 2 行高度进行重绘计算
+            PropertyPopup.HorizontalOffset += 1;
+            PropertyPopup.HorizontalOffset -= 1;
+        }
+        private void ShowPropertyPanelForMosaic()
+        {
+            // 1. 设置内容可见性
             var border = PropertyPopup.Child as System.Windows.Controls.Border;
             if (border != null) border.Visibility = Visibility.Visible;
 
             var colorPanel = border?.Child as System.Windows.Controls.StackPanel;
             if (colorPanel != null)
             {
-                colorPanel.Visibility = Visibility.Visible;
-                colorPanel.Children[0].Visibility = Visibility.Collapsed; // 隐藏颜色选择
-                colorPanel.Children[1].Visibility = Visibility.Visible;   // 显示粗细选择
+                colorPanel.Children[0].Visibility = Visibility.Collapsed; // 隐藏颜色
+                colorPanel.Children[1].Visibility = Visibility.Visible; // 粗细
             }
 
-            // 更新粗细选中状态
+            // 2. 更新UI
             ThicknessThin.IsChecked = _mosaicThickness == AnnotationThickness.Thin;
             ThicknessMedium.IsChecked = _mosaicThickness == AnnotationThickness.Medium;
             ThicknessThick.IsChecked = _mosaicThickness == AnnotationThickness.Thick;
 
-            // 3. 定位逻辑
+            // 3. 定位
             PropertyPopup.PlacementTarget = MosaicToolBtn;
             PropertyPopup.Placement = PlacementMode.Top;
 
@@ -1025,18 +996,16 @@ namespace PathSnip
             PropertyPopup.HorizontalOffset = offsetX;
             PropertyPopup.VerticalOffset = -10;
 
-            // 强制测量内部元素的最新尺寸
-            PropertyPanel.UpdateLayout();
+            // 4. 【核心修复】：保证打开，并抖动触发自适应缩放（变为 1 行高度）
+            if (!PropertyPopup.IsOpen)
+            {
+                PropertyPopup.IsOpen = true;
+            }
 
-            // 4. 先打开 Popup
-            PropertyPopup.IsOpen = true;
-
-            // 5. 【核心修复】在打开状态下重置 Child，消除高度黑边/裁剪问题
-            var child = PropertyPopup.Child;
-            PropertyPopup.Child = null;
-            PropertyPopup.Child = child;
+            // 轻微抖动
+            PropertyPopup.HorizontalOffset += 1;
+            PropertyPopup.HorizontalOffset -= 1;
         }
-
         private void UpdatePropertyPanelUI()
         {
             // 根据当前工具的设置更新UI选中状态
