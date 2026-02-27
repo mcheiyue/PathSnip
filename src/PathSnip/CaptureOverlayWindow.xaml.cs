@@ -929,29 +929,29 @@ namespace PathSnip
         {
             if (_currentTool == AnnotationTool.None || _currentTool == AnnotationTool.Text || _currentTool == AnnotationTool.Mosaic)
             {
-                // 文字和马赛克工具不需要标准属性栏
                 PropertyPopup.IsOpen = false;
                 return;
             }
 
-            // 先关闭再打开，确保位置更新
+            // 1. 先关闭
             PropertyPopup.IsOpen = false;
 
-            // 确保属性面板可见，颜色和粗细都显示
-            PropertyPanel.Visibility = Visibility.Visible;
+            // 2. 动态获取面板并确保外层容器和子元素都是可见的
+            var border = PropertyPopup.Child as System.Windows.Controls.Border;
+            if (border != null) border.Visibility = Visibility.Visible;
 
-            // 找到颜色面板并显示
-            var colorPanel = PropertyPanel.Child as System.Windows.Controls.StackPanel;
+            var colorPanel = border?.Child as System.Windows.Controls.StackPanel;
             if (colorPanel != null)
             {
-                colorPanel.Children[0].Visibility = Visibility.Visible; // 颜色选择
-                colorPanel.Children[1].Visibility = Visibility.Visible; // 粗细选择
+                colorPanel.Visibility = Visibility.Visible;
+                colorPanel.Children[0].Visibility = Visibility.Visible; // 显示颜色选择
+                colorPanel.Children[1].Visibility = Visibility.Visible; // 显示粗细选择
             }
 
             // 更新UI显示当前工具的设置
             UpdatePropertyPanelUI();
 
-            // 找到当前工具按钮
+            // 3. 定位逻辑
             RadioButton currentToolBtn = null;
             if (_currentTool == AnnotationTool.Rectangle)
                 currentToolBtn = RectToolBtn;
@@ -960,24 +960,29 @@ namespace PathSnip
 
             if (currentToolBtn != null)
             {
-                // 使用Popup定位到工具按钮
                 PropertyPopup.PlacementTarget = currentToolBtn;
                 PropertyPopup.Placement = PlacementMode.Top;
                 
-                // 居中偏移
                 var offsetX = -30;
-                
-                // 边界检查 - 确保不超出左/右边界
                 var btnPos = currentToolBtn.TranslatePoint(new Point(0, 0), this);
-                if (btnPos.X + offsetX < 0)
-                    offsetX = (int)(-btnPos.X);
-                else if (btnPos.X + offsetX + 120 > ActualWidth)
-                    offsetX = (int)(ActualWidth - btnPos.X - 120);
+                if (btnPos.X + offsetX < 0) offsetX = (int)(-btnPos.X);
+                else if (btnPos.X + offsetX + 120 > ActualWidth) offsetX = (int)(ActualWidth - btnPos.X - 120);
                 
                 PropertyPopup.HorizontalOffset = offsetX;
                 PropertyPopup.VerticalOffset = -10;
-                PropertyPopup.IsOpen = true;
             }
+
+            // 强制测量内部元素的最新尺寸
+            PropertyPanel.UpdateLayout();
+
+            // 4. 先打开 Popup（此时会生成底层的 HWND 窗口）
+            PropertyPopup.IsOpen = true;
+
+            // 5. 【核心修复】在打开状态下重置 Child
+            // 这会触发底层 DestroyWindow 和 CreateWindow，彻底根据最新尺寸重绘，杜绝任何尺寸残留！
+            var child = PropertyPopup.Child;
+            PropertyPopup.Child = null;
+            PropertyPopup.Child = child;
         }
 
         private void ShowPropertyPanelForMosaic()
@@ -988,18 +993,19 @@ namespace PathSnip
                 return;
             }
 
-            // 先关闭再打开，确保位置更新
+            // 1. 先关闭
             PropertyPopup.IsOpen = false;
 
-            // 确保属性面板可见
-            PropertyPanel.Visibility = Visibility.Visible;
+            // 2. 动态获取面板
+            var border = PropertyPopup.Child as System.Windows.Controls.Border;
+            if (border != null) border.Visibility = Visibility.Visible;
 
-            // 马赛克只需要粗细（块大小），隐藏颜色选择
-            var colorPanel = PropertyPanel.Child as System.Windows.Controls.StackPanel;
+            var colorPanel = border?.Child as System.Windows.Controls.StackPanel;
             if (colorPanel != null)
             {
+                colorPanel.Visibility = Visibility.Visible;
                 colorPanel.Children[0].Visibility = Visibility.Collapsed; // 隐藏颜色选择
-                colorPanel.Children[1].Visibility = Visibility.Visible; // 显示粗细选择
+                colorPanel.Children[1].Visibility = Visibility.Visible;   // 显示粗细选择
             }
 
             // 更新粗细选中状态
@@ -1007,20 +1013,28 @@ namespace PathSnip
             ThicknessMedium.IsChecked = _mosaicThickness == AnnotationThickness.Medium;
             ThicknessThick.IsChecked = _mosaicThickness == AnnotationThickness.Thick;
 
-            // 定位到马赛克按钮
+            // 3. 定位逻辑
             PropertyPopup.PlacementTarget = MosaicToolBtn;
             PropertyPopup.Placement = PlacementMode.Top;
 
             var offsetX = -30;
             var btnPos = MosaicToolBtn.TranslatePoint(new Point(0, 0), this);
-            if (btnPos.X + offsetX < 0)
-                offsetX = (int)(-btnPos.X);
-            else if (btnPos.X + offsetX + 120 > ActualWidth)
-                offsetX = (int)(ActualWidth - btnPos.X - 120);
+            if (btnPos.X + offsetX < 0) offsetX = (int)(-btnPos.X);
+            else if (btnPos.X + offsetX + 120 > ActualWidth) offsetX = (int)(ActualWidth - btnPos.X - 120);
 
             PropertyPopup.HorizontalOffset = offsetX;
             PropertyPopup.VerticalOffset = -10;
+
+            // 强制测量内部元素的最新尺寸
+            PropertyPanel.UpdateLayout();
+
+            // 4. 先打开 Popup
             PropertyPopup.IsOpen = true;
+
+            // 5. 【核心修复】在打开状态下重置 Child，消除高度黑边/裁剪问题
+            var child = PropertyPopup.Child;
+            PropertyPopup.Child = null;
+            PropertyPopup.Child = child;
         }
 
         private void UpdatePropertyPanelUI()
