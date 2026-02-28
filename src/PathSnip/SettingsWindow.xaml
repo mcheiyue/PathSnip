@@ -269,8 +269,8 @@
             <RowDefinition Height="Auto"/>
         </Grid.RowDefinitions>
         
-        <ScrollViewer Grid.Row="0" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled" Padding="0,0,8,0">
-            <StackPanel Margin="0,0,0,0">
+        <ScrollViewer Grid.Row="0" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
+            <StackPanel>
                 
                 <!-- 快捷键设置 -->
                 <GroupBox Header="快捷键设置">
@@ -282,7 +282,7 @@
                         <Grid.ColumnDefinitions>
                             <ColumnDefinition Width="105"/>
                             <ColumnDefinition Width="220"/>
-                            <ColumnDefinition Width="*"/>
+                            <ColumnDefinition Width="80"/>
                         </Grid.ColumnDefinitions>
                         
                         <TextBlock Grid.Row="0" Grid.Column="0" Text="截图快捷键：" VerticalAlignment="Center" TextAlignment="Right" Margin="0,0,12,0" Foreground="#4B5563"/>
@@ -310,7 +310,7 @@
                         <Grid.ColumnDefinitions>
                             <ColumnDefinition Width="105"/>
                             <ColumnDefinition Width="220"/>
-                            <ColumnDefinition Width="*"/>
+                            <ColumnDefinition Width="80"/>
                         </Grid.ColumnDefinitions>
                         
                         <TextBlock Grid.Row="0" Grid.Column="0" Text="保存目录：" VerticalAlignment="Center" TextAlignment="Right" Margin="0,0,12,0" Foreground="#4B5563"/>
@@ -343,18 +343,18 @@
                         <Grid.ColumnDefinitions>
                             <ColumnDefinition Width="105"/>
                             <ColumnDefinition Width="220"/>
-                            <ColumnDefinition Width="*"/>
+                            <ColumnDefinition Width="80"/>
                         </Grid.ColumnDefinitions>
                         
                         <TextBlock Grid.Row="0" Grid.Column="0" Text="剪贴板模式：" VerticalAlignment="Center" TextAlignment="Right" Margin="0,0,12,0" Foreground="#4B5563"/>
-                        <ComboBox Grid.Row="0" Grid.Column="1" x:Name="ClipboardModeComboBox" SelectedIndex="0">
+                        <ComboBox Grid.Row="0" Grid.Column="1" Grid.ColumnSpan="2" x:Name="ClipboardModeComboBox" SelectedIndex="0">
                             <ComboBoxItem Content="仅路径" Tag="PathOnly"/>
                             <ComboBoxItem Content="仅图片" Tag="ImageOnly"/>
                             <ComboBoxItem Content="图片 + 路径" Tag="ImageAndPath"/>
                         </ComboBox>
                         
                         <TextBlock Grid.Row="2" Grid.Column="0" Text="路径格式：" VerticalAlignment="Center" TextAlignment="Right" Margin="0,0,12,0" Foreground="#4B5563"/>
-                        <ComboBox Grid.Row="2" Grid.Column="1" x:Name="PathFormatComboBox" SelectedIndex="0">
+                        <ComboBox Grid.Row="2" Grid.Column="1" Grid.ColumnSpan="2" x:Name="PathFormatComboBox" SelectedIndex="0">
                             <ComboBoxItem Content="纯文本 (D:\path\image.png)" Tag="Text"/>
                             <ComboBoxItem Content="Markdown (![image](...))" Tag="Markdown"/>
                             <ComboBoxItem Content="HTML (&lt;img src=&quot;...&quot;/&gt;)" Tag="HTML"/>
