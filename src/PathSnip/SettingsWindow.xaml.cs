@@ -156,6 +156,29 @@ namespace PathSnip
             StartWithWindowsHelper.SetEnabled(enabled);
         }
 
+        private void ResetButton_Click(object sender, RoutedEventArgs e)
+        {
+            var result = System.Windows.MessageBox.Show(
+                "确定要重置所有设置为默认值吗？",
+                "确认重置",
+                MessageBoxButton.YesNo,
+                MessageBoxImage.Question);
+
+            if (result != MessageBoxResult.Yes)
+                return;
+
+            // 重置为默认值
+            HotkeyTextBox.Text = "Ctrl+Shift+A";
+            SaveDirectoryTextBox.Text = Environment.GetFolderPath(Environment.SpecialFolder.MyPictures);
+            StartWithWindowsCheckBox.IsChecked = false;
+            ShowNotificationCheckBox.IsChecked = true;
+            ClipboardModeComboBox.SelectedIndex = 0;  // 仅路径
+            PathFormatComboBox.SelectedIndex = 0;      // 纯文本
+            FileNameTemplateTextBox.Text = "{yyyy}-{MM}-{dd}_{HHmmss}";
+
+            System.Windows.MessageBox.Show("设置已重置为默认值，请点击\"保存设置\"生效。", "PathSnip", MessageBoxButton.OK, MessageBoxImage.Information);
+        }
+
         private void ShowNotification_Changed(object sender, RoutedEventArgs e)
         {
             // 实时保存会在Button_Click 中处理 Save
