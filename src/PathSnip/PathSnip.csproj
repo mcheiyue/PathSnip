@@ -8,9 +8,9 @@
     <ApplicationIcon>Resources\PathSnip.ico</ApplicationIcon>
     <AssemblyName>PathSnip</AssemblyName>
     <RootNamespace>PathSnip</RootNamespace>
-    <Version>1.0.8</Version>
-    <AssemblyVersion>1.0.8.0</AssemblyVersion>
-    <FileVersion>1.0.8.0</FileVersion>
+    <Version>1.0.9</Version>
+    <AssemblyVersion>1.0.9.0</AssemblyVersion>
+    <FileVersion>1.0.9.0</FileVersion>
     <Company>PathSnip</Company>
     <Product>PathSnip</Product>
     <Description>轻量级截图工具 - 截图后自动将路径复制到剪贴板</Description>
