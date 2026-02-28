@@ -289,7 +289,7 @@ namespace PathSnip
                 config.Save();
 
                 System.Windows.MessageBox.Show("设置已保存", "PathSnip", MessageBoxButton.OK, MessageBoxImage.Information);
-                Close();
+                // 不关闭窗口，让用户可以继续修改
             }
             catch (Exception ex)
             {
