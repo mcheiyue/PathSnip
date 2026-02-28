@@ -177,6 +177,7 @@
                                                     VerticalAlignment="Center"
                                                     HorizontalAlignment="Left"/>
                                     <ToggleButton Grid.Column="1"
+                                                  Grid.ColumnSpan="2"
                                                   x:Name="ToggleButton"
                                                   Focusable="false"
                                                   IsChecked="{Binding Path=IsDropDownOpen, Mode=TwoWay, RelativeSource={RelativeSource TemplatedParent}}"
@@ -268,8 +269,8 @@
             <RowDefinition Height="Auto"/>
         </Grid.RowDefinitions>
         
-        <ScrollViewer Grid.Row="0" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled" Padding="0,0,4,0">
-            <StackPanel Margin="0,0,8,0">
+        <ScrollViewer Grid.Row="0" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled" Padding="0,0,8,0">
+            <StackPanel Margin="0,0,0,0">
                 
                 <!-- 快捷键设置 -->
                 <GroupBox Header="快捷键设置">
@@ -316,8 +317,8 @@
                         <TextBox Grid.Row="0" Grid.Column="1" x:Name="SaveDirectoryTextBox"/>
                         <Button Grid.Row="0" Grid.Column="2" Content="浏览" 
                                 Style="{StaticResource OutlineButton}"
-                                Margin="10,0,0,0" 
-                                HorizontalAlignment="Left" Width="68"
+                                Margin="8,0,0,0" 
+                                HorizontalAlignment="Left" Width="70"
                                 Click="BrowseButton_Click"/>
                         
                         <TextBlock Grid.Row="2" Grid.Column="0" Text="文件名格式：" VerticalAlignment="Center" TextAlignment="Right" Margin="0,0,12,0" Foreground="#4B5563"/>
