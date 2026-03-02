@@ -332,35 +332,59 @@
         <!-- 浮动工具栏 -->
         <Border x:Name="Toolbar"
                 Background="White"
-                CornerRadius="6"
+                CornerRadius="8"
                 Padding="6"
                 Visibility="Collapsed">
             <Border.Effect>
-                <DropShadowEffect BlurRadius="8" ShadowDepth="1" Opacity="0.2" />
+                <DropShadowEffect BlurRadius="12" ShadowDepth="2" Opacity="0.15" Color="#000000" />
             </Border.Effect>
             <StackPanel Orientation="Horizontal">
-                <!-- 标注工具 -->
-                <RadioButton x:Name="RectToolBtn" GroupName="Tools" Style="{StaticResource ToolRadioButtonStyle}" 
-                             Content="&#xE739;" ToolTip="矩形标注" Checked="Tool_Checked" Unchecked="Tool_Unchecked" Tag="Rectangle" />
-                <RadioButton x:Name="ArrowToolBtn" GroupName="Tools" Style="{StaticResource ToolRadioButtonStyle}"
-                             Content="&#xE72A;" ToolTip="箭头标注" Checked="Tool_Checked" Unchecked="Tool_Unchecked" Tag="Arrow" />
-                <RadioButton x:Name="TextToolBtn" GroupName="Tools" Style="{StaticResource ToolRadioButtonStyle}"
-                             Content="&#xE70F;" ToolTip="文字标注" Checked="Tool_Checked" Unchecked="Tool_Unchecked" Tag="Text" />
-                <RadioButton x:Name="MosaicToolBtn" GroupName="Tools" Style="{StaticResource ToolRadioButtonStyle}"
-                             Content="&#xE7B3;" ToolTip="马赛克" Checked="Tool_Checked" Unchecked="Tool_Unchecked" Tag="Mosaic" />
-                <RadioButton x:Name="StepToolBtn" GroupName="Tools" Style="{StaticResource ToolRadioButtonStyle}"
-                             Content="&#xE8EB;" ToolTip="步骤序号" Checked="Tool_Checked" Unchecked="Tool_Unchecked" Tag="Step" />
+                <!-- 绘制工具 -->
+                <RadioButton x:Name="RectToolBtn" GroupName="Tools" Style="{StaticResource ToolRadioButtonStyle}" ToolTip="矩形标注" Checked="Tool_Checked" Unchecked="Tool_Unchecked" Tag="Rectangle">
+                    <Path Data="M5 3H19A2 2 0 0 1 21 5V19A2 2 0 0 1 19 21H5A2 2 0 0 1 3 19V5A2 2 0 0 1 5 3Z" 
+                          Stroke="{Binding Foreground, RelativeSource={RelativeSource AncestorType=ContentControl}}" 
+                          StrokeThickness="2" Fill="Transparent" StrokeLineJoin="Round" Stretch="Uniform" Width="16" Height="16" />
+                </RadioButton>
+                <RadioButton x:Name="ArrowToolBtn" GroupName="Tools" Style="{StaticResource ToolRadioButtonStyle}" ToolTip="箭头标注" Checked="Tool_Checked" Unchecked="Tool_Unchecked" Tag="Arrow">
+                    <Path Data="M7 7h10v10M7 17L17 7" 
+                          Stroke="{Binding Foreground, RelativeSource={RelativeSource AncestorType=ContentControl}}" 
+                          StrokeThickness="2" StrokeStartLineCap="Round" StrokeEndLineCap="Round" StrokeLineJoin="Round" Stretch="Uniform" Width="16" Height="16" />
+                </RadioButton>
+                <RadioButton x:Name="TextToolBtn" GroupName="Tools" Style="{StaticResource ToolRadioButtonStyle}" ToolTip="文字标注" Checked="Tool_Checked" Unchecked="Tool_Unchecked" Tag="Text">
+                    <Path Data="M12 4v16M4 7V5a1 1 0 0 1 1-1h14a1 1 0 0 1 1 1v2M9 20h6" 
+                          Stroke="{Binding Foreground, RelativeSource={RelativeSource AncestorType=ContentControl}}" 
+                          StrokeThickness="2" StrokeStartLineCap="Round" StrokeEndLineCap="Round" StrokeLineJoin="Round" Stretch="Uniform" Width="16" Height="16" />
+                </RadioButton>
+                <RadioButton x:Name="MosaicToolBtn" GroupName="Tools" Style="{StaticResource ToolRadioButtonStyle}" ToolTip="马赛克" Checked="Tool_Checked" Unchecked="Tool_Unchecked" Tag="Mosaic">
+                    <Path Data="M3 3h6v6H3V3zm12 0h6v6h-6V3zM9 9h6v6H9V9zM3 15h6v6H3v-6zm12 0h6v6h-6v-6z" 
+                          Fill="{Binding Foreground, RelativeSource={RelativeSource AncestorType=ContentControl}}" 
+                          Stretch="Uniform" Width="16" Height="16" />
+                </RadioButton>
+                <RadioButton x:Name="StepToolBtn" GroupName="Tools" Style="{StaticResource ToolRadioButtonStyle}" ToolTip="步骤序号" Checked="Tool_Checked" Unchecked="Tool_Unchecked" Tag="Step">
+                    <Path Data="M10 6h11M10 12h11M10 18h11M4 6h1v4M4 10h2M6 18H4c0-1 2-2 2-3s-1-1.5-2-1" 
+                          Stroke="{Binding Foreground, RelativeSource={RelativeSource AncestorType=ContentControl}}" 
+                          StrokeThickness="2" StrokeStartLineCap="Round" StrokeEndLineCap="Round" StrokeLineJoin="Round" Fill="Transparent" Stretch="Uniform" Width="16" Height="16" />
+                </RadioButton>
                 
                 <!-- 分隔线 -->
-                <Rectangle Width="1" Fill="#E0E0E0" Margin="6,4" />
+                <Rectangle Width="1" Fill="#E8E8E8" Margin="8,6" RadiusX="0.5" RadiusY="0.5" />
                 
-                <!-- 操作按钮 -->
-                <Button x:Name="UndoBtn" Style="{StaticResource ToolButtonStyle}" 
-                        Content="&#xE7A7;" ToolTip="撤销" Click="UndoBtn_Click" />
-                <Button x:Name="SaveBtn" Style="{StaticResource ToolButtonStyleSuccess}" 
-                        Content="&#xE73E;" ToolTip="确认保存" Click="SaveBtn_Click" />
-                <Button x:Name="CancelBtn" Style="{StaticResource ToolButtonStyleDanger}" 
-                        Content="&#xE711;" ToolTip="取消" Click="CancelBtn_Click" />
+                <!-- 操作指令 -->
+                <Button x:Name="UndoBtn" Style="{StaticResource ToolButtonStyle}" ToolTip="撤销" Click="UndoBtn_Click">
+                    <Path Data="M9 14L4 9l5-5M4 9h10.5a5.5 5.5 0 0 1 5.5 5.5v0a5.5 5.5 0 0 1-5.5 5.5H11" 
+                          Stroke="{Binding Foreground, RelativeSource={RelativeSource AncestorType=ContentControl}}" 
+                          StrokeThickness="2" StrokeStartLineCap="Round" StrokeEndLineCap="Round" StrokeLineJoin="Round" Fill="Transparent" Stretch="Uniform" Width="16" Height="16" />
+                </Button>
+                <Button x:Name="SaveBtn" Style="{StaticResource ToolButtonStyleSuccess}" ToolTip="确认保存" Click="SaveBtn_Click">
+                    <Path Data="M15.2 3a2 2 0 0 1 1.4.6l3.8 3.8a2 2 0 0 1 .6 1.4V19a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2z M17 21v-7a1 1 0 0 0-1-1H8a1 1 0 0 0-1 1v7M7 3v4a1 1 0 0 0 1 1h7" 
+                          Stroke="{Binding Foreground, RelativeSource={RelativeSource AncestorType=ContentControl}}" 
+                          StrokeThickness="2" StrokeStartLineCap="Round" StrokeEndLineCap="Round" StrokeLineJoin="Round" Fill="Transparent" Stretch="Uniform" Width="16" Height="16" />
+                </Button>
+                <Button x:Name="CancelBtn" Style="{StaticResource ToolButtonStyleDanger}" ToolTip="取消" Click="CancelBtn_Click">
+                    <Path Data="M18 6L6 18M6 6l12 12" 
+                          Stroke="{Binding Foreground, RelativeSource={RelativeSource AncestorType=ContentControl}}" 
+                          StrokeThickness="2" StrokeStartLineCap="Round" StrokeEndLineCap="Round" StrokeLineJoin="Round" Stretch="Uniform" Width="16" Height="16" />
+                </Button>
             </StackPanel>
         </Border>
         
