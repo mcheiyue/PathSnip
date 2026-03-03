@@ -70,6 +70,8 @@ namespace PathSnip
         {
             InitializeComponent();
 
+            Loaded += (s, e) => Focus();
+
             // 设置背景图
             BackgroundImage.Source = background;
 
@@ -290,23 +292,24 @@ namespace PathSnip
 
         private void ShowToolbar()
         {
-            // 先测量工具栏尺寸
+            Toolbar.Visibility = Visibility.Visible;
             Toolbar.Measure(new Size(double.PositiveInfinity, double.PositiveInfinity));
+            Toolbar.Arrange(new Rect(Toolbar.DesiredSize));
+            Toolbar.UpdateLayout();
+
             var toolbarWidth = Toolbar.DesiredSize.Width;
             var toolbarHeight = Toolbar.DesiredSize.Height;
 
-            // 工具栏定位在选区下方
             var toolbarLeft = _currentRect.Left + (_currentRect.Width - toolbarWidth) / 2;
             var toolbarTop = _currentRect.Bottom + 10;
 
-            // 确保不超出屏幕
             if (toolbarLeft < 0) toolbarLeft = 0;
             if (toolbarLeft + toolbarWidth > Width) toolbarLeft = Width - toolbarWidth;
             if (toolbarTop + toolbarHeight > Height) toolbarTop = _currentRect.Top - toolbarHeight - 10;
+            if (toolbarTop < 0) toolbarTop = _currentRect.Bottom + 10;
 
             Canvas.SetLeft(Toolbar, toolbarLeft);
             Canvas.SetTop(Toolbar, toolbarTop);
-            Toolbar.Visibility = Visibility.Visible;
 
             // 激活马赛克画布 - 保持全屏不动
             MosaicCanvas.Visibility = Visibility.Visible;
@@ -708,12 +711,14 @@ namespace PathSnip
             // 强制当前焦点元素（如 TextBox）失去焦点，隐藏输入光标
             Keyboard.ClearFocus();
 
-            // 隐藏所有不需要被截入的 UI 元素
             SelectionRect.Visibility = Visibility.Collapsed;
             SizeLabel.Visibility = Visibility.Collapsed;
             OuterMask.Visibility = Visibility.Collapsed;
             Toolbar.Visibility = Visibility.Collapsed;
-            HideResizeAnchors(); // 隐藏锚点
+            PropertyPopup.IsOpen = false;
+            AnnotationCanvas.Visibility = Visibility.Collapsed;
+            MosaicCanvas.Visibility = Visibility.Collapsed;
+            HideResizeAnchors();
 
             // 强制渲染，确保UI已经隐藏
             Dispatcher.Invoke(() => { }, System.Windows.Threading.DispatcherPriority.Render);
