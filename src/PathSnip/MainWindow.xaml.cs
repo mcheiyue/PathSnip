@@ -148,13 +148,31 @@ namespace PathSnip
                 // 保存文件并获取路径
                 var filePath = FileService.Save(bitmap);
 
-                // 复制路径到剪贴板
-                ClipboardService.SetText(filePath);
+                var config = ConfigService.Instance;
+                string notifyMsg = "已保存";
+                
+                switch (config.ClipboardMode)
+                {
+                    case ClipboardMode.ImageOnly:
+                        ClipboardService.SetImage(bitmap);
+                        notifyMsg = "已保存并复制图片";
+                        break;
+                    case ClipboardMode.ImageAndPath:
+                        var formattedPathForImageAndPath = ClipboardService.FormatPath(filePath, config.PathFormat);
+                        ClipboardService.SetImageAndPath(bitmap, formattedPathForImageAndPath);
+                        notifyMsg = "已保存并复制图片和路径";
+                        break;
+                    default:
+                        var formattedPath = ClipboardService.FormatPath(filePath, config.PathFormat);
+                        ClipboardService.SetText(formattedPath);
+                        notifyMsg = "已保存并复制路径";
+                        break;
+                }
 
                 // 根据配置决定是否显示通知
-                if (ConfigService.Instance.ShowNotification)
+                if (config.ShowNotification)
                 {
-                    TrayIcon.ShowBalloonTip("PathSnip", $"已保存并复制路径", Hardcodet.Wpf.TaskbarNotification.BalloonIcon.Info);
+                    TrayIcon.ShowBalloonTip("PathSnip", notifyMsg, Hardcodet.Wpf.TaskbarNotification.BalloonIcon.Info);
                 }
 
                 LogService.Log($"截图成功: {filePath}");
@@ -181,30 +199,32 @@ namespace PathSnip
             string filePath = null;
             try
             {
-                // 保存文件并获取路径
                 filePath = FileService.Save(bitmap);
 
-                // 根据配置选择复制模式
                 var config = ConfigService.Instance;
+                string notifyMsg = "已保存";
+                
                 switch (config.ClipboardMode)
                 {
                     case ClipboardMode.ImageOnly:
                         ClipboardService.SetImage(bitmap);
+                        notifyMsg = "已保存并复制图片";
                         break;
                     case ClipboardMode.ImageAndPath:
                         var formattedPathForImageAndPath = ClipboardService.FormatPath(filePath, config.PathFormat);
                         ClipboardService.SetImageAndPath(bitmap, formattedPathForImageAndPath);
+                        notifyMsg = "已保存并复制图片和路径";
                         break;
-                    default:  // PathOnly
+                    default:
                         var formattedPath = ClipboardService.FormatPath(filePath, config.PathFormat);
                         ClipboardService.SetText(formattedPath);
+                        notifyMsg = "已保存并复制路径";
                         break;
                 }
 
-                // 根据配置决定是否显示通知
                 if (config.ShowNotification)
                 {
-                    TrayIcon.ShowBalloonTip("PathSnip", $"已保存并复制路径", Hardcodet.Wpf.TaskbarNotification.BalloonIcon.Info);
+                    TrayIcon.ShowBalloonTip("PathSnip", notifyMsg, Hardcodet.Wpf.TaskbarNotification.BalloonIcon.Info);
                 }
 
                 LogService.Log($"截图成功: {filePath}");

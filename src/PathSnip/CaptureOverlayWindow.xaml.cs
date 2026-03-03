@@ -72,6 +72,9 @@ namespace PathSnip
 
             Loaded += (s, e) => Focus();
 
+            AnnotationCanvas.Focusable = true;
+            SelectionCanvas.Focusable = true;
+
             // 设置背景图
             BackgroundImage.Source = background;
 
@@ -236,8 +239,9 @@ namespace PathSnip
 
         private void OnMouseLeftButtonDown(object sender, MouseButtonEventArgs e)
         {
-            // 选区完成后点击应该触发标注或工具栏操作
             if (_selectionCompleted) return;
+
+            SelectionCanvas.Focus();
 
             _startPoint = e.GetPosition(SelectionCanvas);
             _isSelecting = true;
@@ -394,8 +398,7 @@ namespace PathSnip
 
         private void AnnotationCanvas_MouseLeftButtonDown(object sender, MouseButtonEventArgs e)
         {
-            // 如果当前有焦点（比如在 TextBox 里），点击画布空白处时强制清除焦点，触发 LostFocus
-            Keyboard.ClearFocus();
+            AnnotationCanvas.Focus();
 
             if (_currentTool == AnnotationTool.None) return;
 
