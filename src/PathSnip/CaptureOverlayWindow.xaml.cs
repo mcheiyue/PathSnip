@@ -714,7 +714,7 @@ namespace PathSnip
 
         private void CancelCapture()
         {
-            Keyboard.ClearFocus();
+            this.Focus();
             SelectionRect.Visibility = Visibility.Collapsed;
             SizeLabel.Visibility = Visibility.Collapsed;
             OuterMask.Visibility = Visibility.Collapsed;
@@ -729,8 +729,7 @@ namespace PathSnip
 
         private void SaveBtn_Click(object sender, RoutedEventArgs e)
         {
-            // 强制当前焦点元素（如 TextBox）失去焦点，隐藏输入光标
-            Keyboard.ClearFocus();
+            this.Focus();
 
             SelectionRect.Visibility = Visibility.Collapsed;
             SizeLabel.Visibility = Visibility.Collapsed;

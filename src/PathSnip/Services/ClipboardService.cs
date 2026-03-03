@@ -12,7 +12,10 @@ namespace PathSnip.Services
             {
                 try
                 {
-                    Clipboard.SetText(text);
+                    var dataObject = new DataObject();
+                    dataObject.SetData(DataFormats.Text, text);
+                    Clipboard.SetDataObject(dataObject, false);
+                    
                     LogService.Log($"路径已复制到剪贴板: {text}");
                     return;
                 }
@@ -34,7 +37,10 @@ namespace PathSnip.Services
             {
                 try
                 {
-                    Clipboard.SetImage(bitmap);
+                    var dataObject = new DataObject();
+                    dataObject.SetData(DataFormats.Bitmap, bitmap);
+                    Clipboard.SetDataObject(dataObject, false);
+                    
                     LogService.Log("图片已复制到剪贴板");
                     return;
                 }
@@ -59,7 +65,9 @@ namespace PathSnip.Services
                     var dataObject = new DataObject();
                     dataObject.SetData(DataFormats.Bitmap, bitmap);
                     dataObject.SetData(DataFormats.Text, path);
-                    Clipboard.SetDataObject(dataObject, true);
+                    
+                    Clipboard.SetDataObject(dataObject, false);
+                    
                     LogService.Log($"图片+路径已复制到剪贴板: {path}");
                     return;
                 }
