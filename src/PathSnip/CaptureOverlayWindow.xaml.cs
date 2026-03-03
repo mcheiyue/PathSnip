@@ -706,6 +706,35 @@ namespace PathSnip
             _toolContext?.Undo();
         }
 
+        private void Window_KeyDown(object sender, KeyEventArgs e)
+        {
+            if (e.Key == Key.Escape)
+            {
+                CancelCapture();
+                e.Handled = true;
+            }
+        }
+
+        private void CancelBtn_Click(object sender, RoutedEventArgs e)
+        {
+            CancelCapture();
+        }
+
+        private void CancelCapture()
+        {
+            Keyboard.ClearFocus();
+            SelectionRect.Visibility = Visibility.Collapsed;
+            SizeLabel.Visibility = Visibility.Collapsed;
+            OuterMask.Visibility = Visibility.Collapsed;
+            Toolbar.Visibility = Visibility.Collapsed;
+            PropertyPopup.IsOpen = false;
+            AnnotationCanvas.Visibility = Visibility.Collapsed;
+            MosaicCanvas.Visibility = Visibility.Collapsed;
+            HideResizeAnchors();
+
+            CaptureCancelled?.Invoke();
+        }
+
         private void SaveBtn_Click(object sender, RoutedEventArgs e)
         {
             // 强制当前焦点元素（如 TextBox）失去焦点，隐藏输入光标

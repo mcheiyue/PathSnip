@@ -8,46 +8,70 @@ namespace PathSnip.Services
     {
         public static void SetText(string text)
         {
-            try
+            for (int i = 0; i < 3; i++)
             {
-                Clipboard.SetText(text);
-                LogService.Log($"路径已复制到剪贴板: {text}");
-            }
-            catch (Exception ex)
-            {
-                LogService.LogError("复制到剪贴板失败", ex);
-                throw;
+                try
+                {
+                    Clipboard.SetText(text);
+                    LogService.Log($"路径已复制到剪贴板: {text}");
+                    return;
+                }
+                catch (Exception ex)
+                {
+                    if (i == 2)
+                    {
+                        LogService.LogError("复制到剪贴板失败", ex);
+                        throw;
+                    }
+                    System.Threading.Thread.Sleep(50);
+                }
             }
         }
 
         public static void SetImage(BitmapSource bitmap)
         {
-            try
+            for (int i = 0; i < 3; i++)
             {
-                Clipboard.SetImage(bitmap);
-                LogService.Log("图片已复制到剪贴板");
-            }
-            catch (Exception ex)
-            {
-                LogService.LogError("复制图片到剪贴板失败", ex);
-                throw;
+                try
+                {
+                    Clipboard.SetImage(bitmap);
+                    LogService.Log("图片已复制到剪贴板");
+                    return;
+                }
+                catch (Exception ex)
+                {
+                    if (i == 2)
+                    {
+                        LogService.LogError("复制图片到剪贴板失败", ex);
+                        throw;
+                    }
+                    System.Threading.Thread.Sleep(50);
+                }
             }
         }
 
         public static void SetImageAndPath(BitmapSource bitmap, string path)
         {
-            try
+            for (int i = 0; i < 3; i++)
             {
-                var dataObject = new DataObject();
-                dataObject.SetData(DataFormats.Bitmap, bitmap);
-                dataObject.SetData(DataFormats.Text, path);
-                Clipboard.SetDataObject(dataObject, true);
-                LogService.Log($"图片+路径已复制到剪贴板: {path}");
-            }
-            catch (Exception ex)
-            {
-                LogService.LogError("复制到剪贴板失败", ex);
-                throw;
+                try
+                {
+                    var dataObject = new DataObject();
+                    dataObject.SetData(DataFormats.Bitmap, bitmap);
+                    dataObject.SetData(DataFormats.Text, path);
+                    Clipboard.SetDataObject(dataObject, true);
+                    LogService.Log($"图片+路径已复制到剪贴板: {path}");
+                    return;
+                }
+                catch (Exception ex)
+                {
+                    if (i == 2)
+                    {
+                        LogService.LogError("复制到剪贴板失败", ex);
+                        throw;
+                    }
+                    System.Threading.Thread.Sleep(50);
+                }
             }
         }
 
