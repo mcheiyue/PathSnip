@@ -390,14 +390,6 @@ namespace PathSnip
             return new Rect(x, y, width, height);
         }
 
-        private void Window_KeyDown(object sender, KeyEventArgs e)
-        {
-            if (e.Key == Key.Escape)
-            {
-                CaptureCancelled?.Invoke();
-            }
-        }
-
         #region 标注画布事件
 
         private void AnnotationCanvas_MouseLeftButtonDown(object sender, MouseButtonEventArgs e)
@@ -1233,11 +1225,6 @@ namespace PathSnip
         }
 
         #endregion
-
-        private void CancelBtn_Click(object sender, RoutedEventArgs e)
-        {
-            CaptureCancelled?.Invoke();
-        }
 
         #endregion
     }
