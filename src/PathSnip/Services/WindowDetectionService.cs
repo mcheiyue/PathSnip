@@ -40,6 +40,9 @@ namespace PathSnip.Services
         [DllImport("user32.dll")]
         private static extern int GetWindowTextLength(IntPtr hWnd);
 
+        [DllImport("user32.dll")]
+        private static extern bool IsIconic(IntPtr hWnd);
+
         /// <summary>
         /// 获取窗口扩展样式
         /// </summary>
@@ -51,6 +54,9 @@ namespace PathSnip.Services
         /// </summary>
         [DllImport("dwmapi.dll")]
         private static extern int DwmGetWindowAttribute(IntPtr hwnd, int dwAttribute, out RECT pvAttribute, int cbAttribute);
+
+        [DllImport("dwmapi.dll")]
+        private static extern int DwmGetWindowAttribute(IntPtr hwnd, int dwAttribute, out int pvAttribute, int cbAttribute);
 
         /// <summary>
         /// 窗口矩形结构
@@ -72,6 +78,7 @@ namespace PathSnip.Services
 
         // DWM 属性常量
         private const int DWMWA_EXTENDED_FRAME_BOUNDS = 9;
+        private const int DWMWA_CLOAKED = 14;
 
         // GetWindow 命令
         private const uint GW_OWNER = 4;
@@ -98,7 +105,11 @@ namespace PathSnip.Services
             // 查找鼠标下的窗口
             EnumWindows((hWnd, lParam) =>
             {
-                if (!IsWindowVisible(hWnd))
+                if (!IsWindowVisible(hWnd) || IsIconic(hWnd))
+                    return true;
+
+                int cloaked;
+                if (DwmGetWindowAttribute(hWnd, DWMWA_CLOAKED, out cloaked, Marshal.SizeOf<int>()) == 0 && cloaked != 0)
                     return true;
 
                 // 排除自身进程

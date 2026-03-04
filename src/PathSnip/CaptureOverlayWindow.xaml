@@ -333,7 +333,7 @@
         <!-- 窗口吸附高亮框 -->
         <Rectangle x:Name="WindowHighlightRect"
                    Stroke="#0078D4"
-                   StrokeThickness="2"
+                   StrokeThickness="4"
                    Fill="#1A0078D4"
                    Visibility="Collapsed"
                    IsHitTestVisible="False">

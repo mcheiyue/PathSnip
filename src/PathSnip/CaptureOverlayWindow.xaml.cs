@@ -67,6 +67,8 @@ namespace PathSnip
         private DateTime _lastWindowDetectionTime = DateTime.MinValue;
         private readonly int _currentProcessId;
         private Rect? _detectedWindowRect;
+        private Rect? _potentialSnapRect;
+        private bool _isDragging;
 
         public event Action<Rect> CaptureCompleted;
         public event Action CaptureCancelled;
@@ -249,46 +251,21 @@ namespace PathSnip
         {
             if (_selectionCompleted) return;
 
-            // 窗口吸附模式：检测到窗口且高亮框可见时，直接锁定该窗口
-            if (!_isSelecting && _detectedWindowRect.HasValue && WindowHighlightRect?.Visibility == Visibility.Visible)
-            {
-                var absoluteRect = _detectedWindowRect.Value;
-
-                // 坐标转换：绝对屏幕坐标 -> 相对于当前Window的局部坐标
-                _currentRect = new Rect(
-                    absoluteRect.Left - Left,
-                    absoluteRect.Top - Top,
-                    absoluteRect.Width,
-                    absoluteRect.Height);
-
-                // 防御性拦截：忽略极小尺寸的幽灵窗口
-                if (_currentRect.Width <= 5 || _currentRect.Height <= 5) return;
-
-                _selectionCompleted = true;
-                _hasStartedSelection = true;
-
-                // 隐藏高亮框
-                WindowHighlightRect.Visibility = Visibility.Collapsed;
-
-                // 补齐选区UI元素
-                SelectionRect.Visibility = Visibility.Visible;
-                SizeLabel.Visibility = Visibility.Visible;
-                HintText.Visibility = Visibility.Collapsed;
-                OuterMask.Visibility = Visibility.Visible;
-
-                // 强制执行挖孔和边框尺寸渲染
-                UpdateSelection(_currentRect.TopLeft, _currentRect.BottomRight);
-
-                // 立即显示工具栏
-                ShowToolbar();
-                return;
-            }
-
             SelectionCanvas.Focus();
-
             _startPoint = e.GetPosition(SelectionCanvas);
             _isSelecting = true;
             _hasStartedSelection = true;
+            _isDragging = false;
+
+            if (_detectedWindowRect.HasValue && WindowHighlightRect?.Visibility == Visibility.Visible)
+            {
+                _potentialSnapRect = _detectedWindowRect;
+                WindowHighlightRect.Visibility = Visibility.Collapsed;
+            }
+            else
+            {
+                _potentialSnapRect = null;
+            }
 
             SelectionRect.Visibility = Visibility.Visible;
             SizeLabel.Visibility = Visibility.Visible;
@@ -300,7 +277,7 @@ namespace PathSnip
 
         private void OnMouseMove(object sender, MouseEventArgs e)
         {
-            // 窗口吸附检测（仅在初始状态，节流 50ms）
+            // 窗口吸附检测（仅在未开始框选时）
             if (!_isSelecting && !_selectionCompleted)
             {
                 var now = DateTime.Now;
@@ -319,7 +296,22 @@ namespace PathSnip
             if (!_isSelecting) return;
 
             var currentPoint = e.GetPosition(SelectionCanvas);
-            UpdateSelection(_startPoint, currentPoint);
+
+            // 防抖检测：如果移动超过 3 像素，说明用户想手动拉框
+            if (!_isDragging)
+            {
+                if (Math.Abs(currentPoint.X - _startPoint.X) > 3 || Math.Abs(currentPoint.Y - _startPoint.Y) > 3)
+                {
+                    _isDragging = true;
+                    _potentialSnapRect = null;
+                }
+            }
+
+            // 实时更新拉框
+            if (_isDragging || _potentialSnapRect == null)
+            {
+                UpdateSelection(_startPoint, currentPoint);
+            }
         }
 
         private void DetectWindowUnderCursor(MouseEventArgs e)
@@ -357,6 +349,30 @@ namespace PathSnip
 
             _isSelecting = false;
 
+            // 情况A：用户单击了鼠标（没有触发拖拽），且刚才鼠标下有窗口
+            if (_potentialSnapRect.HasValue && !_isDragging)
+            {
+                var absoluteRect = _potentialSnapRect.Value;
+                _currentRect = new Rect(
+                    absoluteRect.Left - Left,
+                    absoluteRect.Top - Top,
+                    absoluteRect.Width,
+                    absoluteRect.Height);
+
+                if (_currentRect.Width > 5 && _currentRect.Height > 5)
+                {
+                    _selectionCompleted = true;
+                    UpdateSelection(_currentRect.TopLeft, _currentRect.BottomRight);
+                    ShowToolbar();
+                }
+                else
+                {
+                    CaptureCancelled?.Invoke();
+                }
+                return;
+            }
+
+            // 情况B：用户手动拉框完毕
             var endPoint = e.GetPosition(SelectionCanvas);
             var rect = GetRect(_startPoint, endPoint);
 
@@ -364,20 +380,11 @@ namespace PathSnip
             {
                 _currentRect = rect;
                 _selectionCompleted = true;
-
-                // 转换屏幕坐标
-                var screenRect = new Rect(
-                    rect.Left + Left,
-                    rect.Top + Top,
-                    rect.Width,
-                    rect.Height);
-
-                // 显示工具栏
+                UpdateSelection(_currentRect.TopLeft, _currentRect.BottomRight);
                 ShowToolbar();
             }
             else
             {
-                // 选区太小，取消
                 CaptureCancelled?.Invoke();
             }
         }
@@ -395,10 +402,20 @@ namespace PathSnip
             var toolbarLeft = _currentRect.Left + (_currentRect.Width - toolbarWidth) / 2;
             var toolbarTop = _currentRect.Bottom + 10;
 
-            if (toolbarLeft < 0) toolbarLeft = 0;
-            if (toolbarLeft + toolbarWidth > Width) toolbarLeft = Width - toolbarWidth;
-            if (toolbarTop + toolbarHeight > Height) toolbarTop = _currentRect.Top - toolbarHeight - 10;
-            if (toolbarTop < 0) toolbarTop = _currentRect.Bottom + 10;
+            if (toolbarLeft < 10) toolbarLeft = 10;
+            if (toolbarLeft + toolbarWidth + 10 > Width) toolbarLeft = Width - toolbarWidth - 10;
+
+            if (toolbarTop + toolbarHeight + 10 > Height)
+            {
+                toolbarTop = _currentRect.Bottom - toolbarHeight - 10;
+                if (toolbarTop < _currentRect.Top)
+                {
+                    toolbarTop = _currentRect.Top - toolbarHeight - 10;
+                }
+            }
+
+            if (toolbarTop < 10) toolbarTop = 10;
+            if (toolbarTop + toolbarHeight + 10 > Height) toolbarTop = Height - toolbarHeight - 10;
 
             Canvas.SetLeft(Toolbar, toolbarLeft);
             Canvas.SetTop(Toolbar, toolbarTop);
