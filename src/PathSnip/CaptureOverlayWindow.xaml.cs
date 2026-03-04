@@ -63,6 +63,11 @@ namespace PathSnip
         private bool _isDrawing;
         private bool _selectionCompleted;
 
+        // 窗口吸附相关变量
+        private DateTime _lastWindowDetectionTime = DateTime.MinValue;
+        private readonly int _currentProcessId;
+        private Rect? _detectedWindowRect;
+
         public event Action<Rect> CaptureCompleted;
         public event Action CaptureCancelled;
 
@@ -74,6 +79,9 @@ namespace PathSnip
 
             AnnotationCanvas.Focusable = true;
             SelectionCanvas.Focusable = true;
+
+            // 初始化当前进程ID（用于过滤自身窗口）
+            _currentProcessId = WindowDetectionService.GetCurrentProcessId();
 
             // 设置背景图
             BackgroundImage.Source = background;
@@ -241,6 +249,41 @@ namespace PathSnip
         {
             if (_selectionCompleted) return;
 
+            // 窗口吸附模式：检测到窗口且高亮框可见时，直接锁定该窗口
+            if (!_isSelecting && _detectedWindowRect.HasValue && WindowHighlightRect?.Visibility == Visibility.Visible)
+            {
+                var absoluteRect = _detectedWindowRect.Value;
+
+                // 坐标转换：绝对屏幕坐标 -> 相对于当前Window的局部坐标
+                _currentRect = new Rect(
+                    absoluteRect.Left - Left,
+                    absoluteRect.Top - Top,
+                    absoluteRect.Width,
+                    absoluteRect.Height);
+
+                // 防御性拦截：忽略极小尺寸的幽灵窗口
+                if (_currentRect.Width <= 5 || _currentRect.Height <= 5) return;
+
+                _selectionCompleted = true;
+                _hasStartedSelection = true;
+
+                // 隐藏高亮框
+                WindowHighlightRect.Visibility = Visibility.Collapsed;
+
+                // 补齐选区UI元素
+                SelectionRect.Visibility = Visibility.Visible;
+                SizeLabel.Visibility = Visibility.Visible;
+                HintText.Visibility = Visibility.Collapsed;
+                OuterMask.Visibility = Visibility.Visible;
+
+                // 强制执行挖孔和边框尺寸渲染
+                UpdateSelection(_currentRect.TopLeft, _currentRect.BottomRight);
+
+                // 立即显示工具栏
+                ShowToolbar();
+                return;
+            }
+
             SelectionCanvas.Focus();
 
             _startPoint = e.GetPosition(SelectionCanvas);
@@ -257,10 +300,55 @@ namespace PathSnip
 
         private void OnMouseMove(object sender, MouseEventArgs e)
         {
+            // 窗口吸附检测（仅在初始状态，节流 50ms）
+            if (!_isSelecting && !_selectionCompleted)
+            {
+                var now = DateTime.Now;
+                if ((now - _lastWindowDetectionTime).TotalMilliseconds >= 50)
+                {
+                    _lastWindowDetectionTime = now;
+                    DetectWindowUnderCursor(e);
+                }
+                return;
+            }
+
+            // 隐藏窗口高亮框
+            if (WindowHighlightRect != null)
+                WindowHighlightRect.Visibility = Visibility.Collapsed;
+
             if (!_isSelecting) return;
 
             var currentPoint = e.GetPosition(SelectionCanvas);
             UpdateSelection(_startPoint, currentPoint);
+        }
+
+        private void DetectWindowUnderCursor(MouseEventArgs e)
+        {
+            var mousePos = e.GetPosition(this);
+            var screenPos = new Point(mousePos.X + Left, mousePos.Y + Top);
+
+            _detectedWindowRect = WindowDetectionService.GetWindowUnderCursor(screenPos, _currentProcessId);
+
+            if (_detectedWindowRect.HasValue && WindowHighlightRect != null)
+            {
+                var rect = _detectedWindowRect.Value;
+                // 转换为相对于 CaptureOverlayWindow 的坐标
+                var relativeRect = new Rect(
+                    rect.Left - Left,
+                    rect.Top - Top,
+                    rect.Width,
+                    rect.Height);
+
+                Canvas.SetLeft(WindowHighlightRect, relativeRect.Left);
+                Canvas.SetTop(WindowHighlightRect, relativeRect.Top);
+                WindowHighlightRect.Width = relativeRect.Width;
+                WindowHighlightRect.Height = relativeRect.Height;
+                WindowHighlightRect.Visibility = Visibility.Visible;
+            }
+            else if (WindowHighlightRect != null)
+            {
+                WindowHighlightRect.Visibility = Visibility.Collapsed;
+            }
         }
 
         private void OnMouseLeftButtonUp(object sender, MouseButtonEventArgs e)

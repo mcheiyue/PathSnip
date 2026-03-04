@@ -330,6 +330,33 @@
                    MouseRightButtonDown="ResizeThumb_MouseRightButtonDown" />
         </Canvas>
         
+        <!-- 窗口吸附高亮框 -->
+        <Rectangle x:Name="WindowHighlightRect"
+                   Stroke="#0078D4"
+                   StrokeThickness="2"
+                   Fill="#1A0078D4"
+                   Visibility="Collapsed"
+                   IsHitTestVisible="False">
+            <Rectangle.Effect>
+                <DropShadowEffect BlurRadius="8" ShadowDepth="0" Opacity="0.3" Color="#0078D4" />
+            </Rectangle.Effect>
+            <Rectangle.Style>
+                <Style TargetType="Rectangle">
+                    <Style.Triggers>
+                        <Trigger Property="Visibility" Value="Visible">
+                            <Trigger.EnterActions>
+                                <BeginStoryboard>
+                                    <Storyboard>
+                                        <DoubleAnimation Storyboard.TargetProperty="Opacity" From="0" To="1" Duration="0:0:0.1" />
+                                    </Storyboard>
+                                </BeginStoryboard>
+                            </Trigger.EnterActions>
+                        </Trigger>
+                    </Style.Triggers>
+                </Style>
+            </Rectangle.Style>
+        </Rectangle>
+        
         <!-- 浮动工具栏 -->
         <Border x:Name="Toolbar"
                 Background="White"
