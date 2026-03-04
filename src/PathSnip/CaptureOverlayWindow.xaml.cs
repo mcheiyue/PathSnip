@@ -7,6 +7,7 @@ using System.Windows.Input;
 using System.Windows.Media;
 using System.Windows.Media.Imaging;
 using System.Windows.Shapes;
+using PathSnip.Helpers;
 using PathSnip.Services;
 using PathSnip.Tools;
 
@@ -70,6 +71,9 @@ namespace PathSnip
         private Rect? _potentialSnapRect;
         private bool _isDragging;
 
+        // 放大镜相关变量
+        private string _currentColorHex = "";
+
         public event Action<Rect> CaptureCompleted;
         public event Action CaptureCancelled;
 
@@ -100,6 +104,9 @@ namespace PathSnip
 
             // 预渲染马赛克背景（性能优化）
             PrepareMosaicBackground();
+
+            // 初始化放大镜
+            MagnifierUI.Visibility = Visibility.Visible;
 
             MouseLeftButtonDown += OnMouseLeftButtonDown;
             MouseMove += OnMouseMove;
@@ -277,21 +284,29 @@ namespace PathSnip
 
         private void OnMouseMove(object sender, MouseEventArgs e)
         {
-            // 窗口吸附检测（仅在未开始框选时）
+            var mousePos = e.GetPosition(this);
+
+            // 窗口吸附检测 + 放大镜更新（仅在未开始框选时）
             if (!_isSelecting && !_selectionCompleted)
             {
+                // 窗口吸附检测（50ms 节流）
                 var now = DateTime.Now;
                 if ((now - _lastWindowDetectionTime).TotalMilliseconds >= 50)
                 {
                     _lastWindowDetectionTime = now;
                     DetectWindowUnderCursor(e);
                 }
+
+                // 放大镜更新（无节流，直接更新以保证丝滑体验）
+                UpdateMagnifier(mousePos);
                 return;
             }
 
-            // 隐藏窗口高亮框
+            // 隐藏窗口高亮框和放大镜
             if (WindowHighlightRect != null)
                 WindowHighlightRect.Visibility = Visibility.Collapsed;
+
+            MagnifierUI.Visibility = Visibility.Collapsed;
 
             if (!_isSelecting) return;
 
@@ -341,6 +356,55 @@ namespace PathSnip
             {
                 WindowHighlightRect.Visibility = Visibility.Collapsed;
             }
+        }
+
+        private void UpdateMagnifier(Point mousePos)
+        {
+            if (!(BackgroundImage.Source is BitmapSource bg)) return;
+
+            // 获取当前像素颜色
+            var color = MagnifierHelper.GetPixelColor(bg, mousePos.X, mousePos.Y, _dpiScaleX, _dpiScaleY);
+
+            // 更新颜色显示
+            ColorRGBText.Text = MagnifierHelper.ToRgbString(color);
+            _currentColorHex = MagnifierHelper.ToHexString(color);
+            ColorHexText.Text = "#" + _currentColorHex;
+
+            // 更新放大图像（25×25 像素区域，400% 放大后为 100×100）
+            MagnifierImage.Source = MagnifierHelper.GetMagnifiedRegion(bg, mousePos.X, mousePos.Y, 25, _dpiScaleX, _dpiScaleY);
+
+            // 更新放大镜位置（考虑屏幕边缘碰撞）
+            UpdateMagnifierPosition(mousePos);
+        }
+
+        private void UpdateMagnifierPosition(Point mousePos)
+        {
+            double offsetX = 15;
+            double offsetY = 15;
+            double magnifierWidth = 110;
+            double magnifierHeight = 130;
+
+            double newLeft = mousePos.X + offsetX;
+            double newTop = mousePos.Y + offsetY;
+
+            // 检测右边缘碰撞
+            if (newLeft + magnifierWidth > Width)
+            {
+                newLeft = mousePos.X - magnifierWidth - offsetX;
+            }
+
+            // 检测下边缘碰撞
+            if (newTop + magnifierHeight > Height)
+            {
+                newTop = mousePos.Y - magnifierHeight - offsetY;
+            }
+
+            // 确保不超出左/上边界
+            if (newLeft < 0) newLeft = 0;
+            if (newTop < 0) newTop = 0;
+
+            Canvas.SetLeft(MagnifierUI, newLeft);
+            Canvas.SetTop(MagnifierUI, newTop);
         }
 
         private void OnMouseLeftButtonUp(object sender, MouseButtonEventArgs e)
@@ -806,6 +870,11 @@ namespace PathSnip
             _toolContext?.Undo();
         }
 
+        private void CancelBtn_Click(object sender, RoutedEventArgs e)
+        {
+            CancelCapture();
+        }
+
         private void Window_KeyDown(object sender, KeyEventArgs e)
         {
             if (e.Key == Key.Escape)
@@ -813,11 +882,27 @@ namespace PathSnip
                 CancelCapture();
                 e.Handled = true;
             }
-        }
+            else if (e.Key == Key.C && MagnifierUI.Visibility == Visibility.Visible)
+            {
+                if (!string.IsNullOrEmpty(_currentColorHex))
+                {
+                    Clipboard.SetText(_currentColorHex);
 
-        private void CancelBtn_Click(object sender, RoutedEventArgs e)
-        {
-            CancelCapture();
+                    // 视觉反馈
+                    ColorHexText.Text = "已复制!";
+                    var timer = new System.Windows.Threading.DispatcherTimer
+                    {
+                        Interval = TimeSpan.FromMilliseconds(800)
+                    };
+                    timer.Tick += (s, args) =>
+                    {
+                        ColorHexText.Text = "#" + _currentColorHex;
+                        timer.Stop();
+                    };
+                    timer.Start();
+                }
+                e.Handled = true;
+            }
         }
 
         private void CancelCapture()
