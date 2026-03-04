@@ -107,7 +107,6 @@ namespace PathSnip
             Loaded += (s, e) =>
             {
                 PrepareMosaicBackground();
-                MagnifierUI.Visibility = Visibility.Visible;
             };
 
             // 初始化放大镜
@@ -915,6 +914,9 @@ namespace PathSnip
                         timer.Stop();
                     };
                     timer.Start();
+
+                    // 播放系统提示音
+                    System.Media.SystemSounds.Asterisk.Play();
 
                     // 2. 开启独立的 STA 线程去写入剪贴板，彻底告别主线程卡顿
                     System.Threading.Thread thread = new System.Threading.Thread(() =>
