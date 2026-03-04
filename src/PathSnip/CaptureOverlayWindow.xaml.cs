@@ -383,7 +383,7 @@ namespace PathSnip
             }
 
             // 更新放大图像（25×25 像素区域，400% 放大后为 100×100）
-            MagnifierImage.Source = MagnifierHelper.GetMagnifiedRegion(bg, mousePos.X, mousePos.Y, 38, _dpiScaleX, _dpiScaleY);
+            MagnifierImage.Source = MagnifierHelper.GetMagnifiedRegion(bg, mousePos.X, mousePos.Y, 40, _dpiScaleX, _dpiScaleY);
 
             // 更新放大镜位置（考虑屏幕边缘碰撞）
             UpdateMagnifierPosition(mousePos);
@@ -393,8 +393,8 @@ namespace PathSnip
         {
             double offsetX = 15;
             double offsetY = 15;
-            double magnifierWidth = 150;
-            double magnifierHeight = 235;
+            double magnifierWidth = 160;
+            double magnifierHeight = 245;
 
             double newLeft = mousePos.X + offsetX;
             double newTop = mousePos.Y + offsetY;
@@ -910,7 +910,7 @@ namespace PathSnip
                     timer.Tick += (s, args) =>
                     {
                         _isShowingCopyFeedback = false;
-                        ColorHexText.Text = hexWithPrefix;
+                        ColorHexText.Text = "#" + _currentColorHex;
                         timer.Stop();
                     };
                     timer.Start();
@@ -923,7 +923,7 @@ namespace PathSnip
                     {
                         try
                         {
-                            Clipboard.SetText(hexWithPrefix);
+                            ClipboardService.SetText(hexWithPrefix);
                         }
                         catch
                         {

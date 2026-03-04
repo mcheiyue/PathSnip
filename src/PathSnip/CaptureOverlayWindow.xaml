@@ -474,7 +474,7 @@
               Visibility="Collapsed"
               Panel.ZIndex="999"
               IsHitTestVisible="False"
-              Width="150"
+              Width="160"
               SnapsToDevicePixels="True">
             <Grid.Effect>
                 <DropShadowEffect BlurRadius="12" ShadowDepth="2" Opacity="0.3"/>
@@ -482,18 +482,18 @@
 
             <StackPanel>
                 
-                <Grid Width="150" Height="150" Background="Black">
+                <Grid Width="160" Height="160" Background="Black">
                     <Grid.Clip>
                         <GeometryGroup FillRule="Nonzero">
-                            <RectangleGeometry Rect="0,0,150,150" RadiusX="8" RadiusY="8"/>
-                            <RectangleGeometry Rect="0,75,150,75"/>
+                            <RectangleGeometry Rect="0,0,160,160" RadiusX="8" RadiusY="8"/>
+                            <RectangleGeometry Rect="0,80,160,80"/>
                         </GeometryGroup>
                     </Grid.Clip>
                     
                     <Image x:Name="MagnifierImage" 
                            RenderOptions.BitmapScalingMode="NearestNeighbor"
                            Stretch="Fill"/>
-                    <Path Stroke="#0078D4" StrokeThickness="1" Data="M75,0 L75,150 M0,75 L150,75"/>
+                    <Path Stroke="#0078D4" StrokeThickness="1" Data="M80,0 L80,160 M0,80 L160,80"/>
                 </Grid>
 
                 <Border Background="#F5F5F5" CornerRadius="0,0,8,8">
