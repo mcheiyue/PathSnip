@@ -476,28 +476,34 @@
               IsHitTestVisible="False"
               Width="150">
             <Grid.Effect>
-                <DropShadowEffect BlurRadius="10" ShadowDepth="2" Opacity="0.25"/>
+                <DropShadowEffect BlurRadius="12" ShadowDepth="2" Opacity="0.3"/>
             </Grid.Effect>
 
             <Border Background="#F5F5F5" CornerRadius="8">
                 <StackPanel>
-                    <Border Height="150" CornerRadius="8,8,0,0" ClipToBounds="True">
-                        <Grid Background="Black">
-                            <Image x:Name="MagnifierImage" 
-                                   RenderOptions.BitmapScalingMode="NearestNeighbor"
-                                   Stretch="Fill"/>
-                            <Path Stroke="#0078D4" StrokeThickness="1" Data="M75,0 L75,150 M0,75 L150,75"/>
-                        </Grid>
-                    </Border>
+                    
+                    <Grid Width="150" Height="150" Background="Black">
+                        <Grid.OpacityMask>
+                            <VisualBrush>
+                                <VisualBrush.Visual>
+                                    <Border Width="150" Height="150" Background="White" CornerRadius="8,8,0,0" />
+                                </VisualBrush.Visual>
+                            </VisualBrush>
+                        </Grid.OpacityMask>
+                        
+                        <Image x:Name="MagnifierImage" 
+                               RenderOptions.BitmapScalingMode="NearestNeighbor"
+                               Stretch="Fill"/>
+                        <Path Stroke="#0078D4" StrokeThickness="1" Data="M75,0 L75,150 M0,75 L150,75"/>
+                    </Grid>
+
                     <StackPanel Margin="8,10,8,12">
-                        <TextBlock x:Name="ColorRGBText" FontSize="13" FontWeight="SemiBold" FontFamily="Consolas" Foreground="#555555" HorizontalAlignment="Center"/>
-                        <TextBlock x:Name="ColorHexText" FontSize="16" FontWeight="Bold" FontFamily="Consolas" Foreground="#222222" HorizontalAlignment="Center" Margin="0,4,0,0"/>
-                        <TextBlock Text="按 C 键复制色值" FontSize="11" FontWeight="Medium" Foreground="#888888" HorizontalAlignment="Center" Margin="0,6,0,0"/>
+                        <TextBlock x:Name="ColorRGBText" FontSize="14" FontWeight="Bold" FontFamily="Consolas" Foreground="#333333" HorizontalAlignment="Center"/>
+                        <TextBlock x:Name="ColorHexText" FontSize="16" FontWeight="Bold" FontFamily="Consolas" Foreground="#111111" HorizontalAlignment="Center" Margin="0,6,0,0"/>
+                        <TextBlock Text="按 C 键复制色值" FontSize="13" FontWeight="Bold" Foreground="#666666" HorizontalAlignment="Center" Margin="0,8,0,0"/>
                     </StackPanel>
                 </StackPanel>
             </Border>
-
-            <Border BorderBrush="#DFDFDF" BorderThickness="1" CornerRadius="8" IsHitTestVisible="False" />
         </Grid>
     </Canvas>
 </Window>

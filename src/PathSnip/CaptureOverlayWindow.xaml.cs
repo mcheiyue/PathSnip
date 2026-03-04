@@ -899,28 +899,36 @@ namespace PathSnip
             {
                 if (!string.IsNullOrEmpty(_currentColorHex))
                 {
-                    try
-                    {
-                        string hexWithPrefix = "#" + _currentColorHex;
-                        Clipboard.SetText(hexWithPrefix);
+                    string hexWithPrefix = "#" + _currentColorHex;
 
-                        _isShowingCopyFeedback = true;
-                        ColorHexText.Text = "已复制!";
-                        var timer = new System.Windows.Threading.DispatcherTimer
-                        {
-                            Interval = TimeSpan.FromMilliseconds(800)
-                        };
-                        timer.Tick += (s, args) =>
-                        {
-                            _isShowingCopyFeedback = false;
-                            ColorHexText.Text = hexWithPrefix;
-                            timer.Stop();
-                        };
-                        timer.Start();
-                    }
-                    catch (Exception)
+                    // 1. 立即更新 UI 给用户反馈，防止底层阻塞导致文字被吞
+                    _isShowingCopyFeedback = true;
+                    ColorHexText.Text = "已复制!";
+                    var timer = new System.Windows.Threading.DispatcherTimer
                     {
-                    }
+                        Interval = TimeSpan.FromMilliseconds(800)
+                    };
+                    timer.Tick += (s, args) =>
+                    {
+                        _isShowingCopyFeedback = false;
+                        ColorHexText.Text = hexWithPrefix;
+                        timer.Stop();
+                    };
+                    timer.Start();
+
+                    // 2. 开启独立的 STA 线程去写入剪贴板，彻底告别主线程卡顿
+                    System.Threading.Thread thread = new System.Threading.Thread(() =>
+                    {
+                        try
+                        {
+                            Clipboard.SetText(hexWithPrefix);
+                        }
+                        catch
+                        {
+                        }
+                    });
+                    thread.SetApartmentState(System.Threading.ApartmentState.STA);
+                    thread.Start();
                 }
                 e.Handled = true;
             }
