@@ -468,5 +468,34 @@
                 <DropShadowEffect BlurRadius="4" ShadowDepth="1" Opacity="0.5" />
             </TextBlock.Effect>
         </TextBlock>
+        
+        <!-- 放大镜与拾色器 UI -->
+        <Border x:Name="MagnifierUI" 
+                Visibility="Collapsed"
+                Panel.ZIndex="999"
+                IsHitTestVisible="False">
+            <Border.Effect>
+                <DropShadowEffect BlurRadius="8" ShadowDepth="1" Opacity="0.3"/>
+            </Border.Effect>
+            <StackPanel Width="110">
+                <!-- 100×100 放大区域 + 准星 -->
+                <Border Width="100" Height="100" BorderBrush="#E0E0E0" BorderThickness="1" Background="Black">
+                    <Grid>
+                        <Image x:Name="MagnifierImage" 
+                               RenderOptions.BitmapScalingMode="NearestNeighbor"
+                               Stretch="Fill"/>
+                        <!-- 红色十字准星 -->
+                        <Path Stroke="#FF0000" StrokeThickness="1" Data="M50,0 L50,100 M0,50 L100,50"/>
+                    </Grid>
+                </Border>
+                <!-- 颜色信息栏 -->
+                <Border Background="#F5F5F5" Padding="6,4">
+                    <StackPanel>
+                        <TextBlock x:Name="ColorRGBText" FontSize="10" FontFamily="Consolas" Foreground="#333333"/>
+                        <TextBlock x:Name="ColorHexText" FontSize="11" FontWeight="Bold" FontFamily="Consolas" Foreground="#333333"/>
+                    </StackPanel>
+                </Border>
+            </StackPanel>
+        </Border>
     </Canvas>
 </Window>
