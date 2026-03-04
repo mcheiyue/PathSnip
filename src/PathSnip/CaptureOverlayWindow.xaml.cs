@@ -297,6 +297,9 @@ namespace PathSnip
                     DetectWindowUnderCursor(e);
                 }
 
+                // 显式恢复放大镜的可见性
+                MagnifierUI.Visibility = Visibility.Visible;
+
                 // 放大镜更新（无节流，直接更新以保证丝滑体验）
                 UpdateMagnifier(mousePos);
                 return;
@@ -371,7 +374,7 @@ namespace PathSnip
             ColorHexText.Text = "#" + _currentColorHex;
 
             // 更新放大图像（25×25 像素区域，400% 放大后为 100×100）
-            MagnifierImage.Source = MagnifierHelper.GetMagnifiedRegion(bg, mousePos.X, mousePos.Y, 25, _dpiScaleX, _dpiScaleY);
+            MagnifierImage.Source = MagnifierHelper.GetMagnifiedRegion(bg, mousePos.X, mousePos.Y, 35, _dpiScaleX, _dpiScaleY);
 
             // 更新放大镜位置（考虑屏幕边缘碰撞）
             UpdateMagnifierPosition(mousePos);
@@ -381,8 +384,8 @@ namespace PathSnip
         {
             double offsetX = 15;
             double offsetY = 15;
-            double magnifierWidth = 110;
-            double magnifierHeight = 130;
+            double magnifierWidth = 140;
+            double magnifierHeight = 205;
 
             double newLeft = mousePos.X + offsetX;
             double newTop = mousePos.Y + offsetY;
@@ -882,24 +885,29 @@ namespace PathSnip
                 CancelCapture();
                 e.Handled = true;
             }
-            else if (e.Key == Key.C && MagnifierUI.Visibility == Visibility.Visible)
+            else if (e.Key == Key.C && (Keyboard.Modifiers & ModifierKeys.Control) == ModifierKeys.Control && MagnifierUI.Visibility == Visibility.Visible)
             {
                 if (!string.IsNullOrEmpty(_currentColorHex))
                 {
-                    Clipboard.SetText(_currentColorHex);
+                    try
+                    {
+                        Clipboard.SetText(_currentColorHex);
 
-                    // 视觉反馈
-                    ColorHexText.Text = "已复制!";
-                    var timer = new System.Windows.Threading.DispatcherTimer
+                        ColorHexText.Text = "已复制!";
+                        var timer = new System.Windows.Threading.DispatcherTimer
+                        {
+                            Interval = TimeSpan.FromMilliseconds(800)
+                        };
+                        timer.Tick += (s, args) =>
+                        {
+                            ColorHexText.Text = "#" + _currentColorHex;
+                            timer.Stop();
+                        };
+                        timer.Start();
+                    }
+                    catch (Exception)
                     {
-                        Interval = TimeSpan.FromMilliseconds(800)
-                    };
-                    timer.Tick += (s, args) =>
-                    {
-                        ColorHexText.Text = "#" + _currentColorHex;
-                        timer.Stop();
-                    };
-                    timer.Start();
+                    }
                 }
                 e.Handled = true;
             }
