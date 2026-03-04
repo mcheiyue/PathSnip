@@ -73,6 +73,7 @@ namespace PathSnip
 
         // 放大镜相关变量
         private string _currentColorHex = "";
+        private bool _isShowingCopyFeedback = false;
 
         public event Action<Rect> CaptureCompleted;
         public event Action CaptureCancelled;
@@ -102,11 +103,15 @@ namespace PathSnip
             // 初始化全屏遮罩矩形
             FullScreenGeometry.Rect = new Rect(0, 0, Width, Height);
 
-            // 预渲染马赛克背景（性能优化）
-            PrepareMosaicBackground();
+            // 将 PrepareMosaicBackground 移到 Loaded 事件中（此时 Window 已挂载到 Visual Tree，可获取真实 DPI）
+            Loaded += (s, e) =>
+            {
+                PrepareMosaicBackground();
+                MagnifierUI.Visibility = Visibility.Visible;
+            };
 
             // 初始化放大镜
-            MagnifierUI.Visibility = Visibility.Visible;
+            // MagnifierUI.Visibility = Visibility.Visible; // 移至 Loaded 事件中
 
             MouseLeftButtonDown += OnMouseLeftButtonDown;
             MouseMove += OnMouseMove;
@@ -371,10 +376,15 @@ namespace PathSnip
             // 更新颜色显示
             ColorRGBText.Text = MagnifierHelper.ToRgbString(color);
             _currentColorHex = MagnifierHelper.ToHexString(color);
-            ColorHexText.Text = "#" + _currentColorHex;
+            
+            // 如果正在显示复制成功的提示，则暂时不更新这行文字
+            if (!_isShowingCopyFeedback)
+            {
+                ColorHexText.Text = "#" + _currentColorHex;
+            }
 
             // 更新放大图像（25×25 像素区域，400% 放大后为 100×100）
-            MagnifierImage.Source = MagnifierHelper.GetMagnifiedRegion(bg, mousePos.X, mousePos.Y, 35, _dpiScaleX, _dpiScaleY);
+            MagnifierImage.Source = MagnifierHelper.GetMagnifiedRegion(bg, mousePos.X, mousePos.Y, 38, _dpiScaleX, _dpiScaleY);
 
             // 更新放大镜位置（考虑屏幕边缘碰撞）
             UpdateMagnifierPosition(mousePos);
@@ -384,8 +394,8 @@ namespace PathSnip
         {
             double offsetX = 15;
             double offsetY = 15;
-            double magnifierWidth = 140;
-            double magnifierHeight = 205;
+            double magnifierWidth = 150;
+            double magnifierHeight = 235;
 
             double newLeft = mousePos.X + offsetX;
             double newTop = mousePos.Y + offsetY;
@@ -885,14 +895,16 @@ namespace PathSnip
                 CancelCapture();
                 e.Handled = true;
             }
-            else if (e.Key == Key.C && (Keyboard.Modifiers & ModifierKeys.Control) == ModifierKeys.Control && MagnifierUI.Visibility == Visibility.Visible)
+            else if (e.Key == Key.C && MagnifierUI.Visibility == Visibility.Visible)
             {
                 if (!string.IsNullOrEmpty(_currentColorHex))
                 {
                     try
                     {
-                        Clipboard.SetText(_currentColorHex);
+                        string hexWithPrefix = "#" + _currentColorHex;
+                        Clipboard.SetText(hexWithPrefix);
 
+                        _isShowingCopyFeedback = true;
                         ColorHexText.Text = "已复制!";
                         var timer = new System.Windows.Threading.DispatcherTimer
                         {
@@ -900,7 +912,8 @@ namespace PathSnip
                         };
                         timer.Tick += (s, args) =>
                         {
-                            ColorHexText.Text = "#" + _currentColorHex;
+                            _isShowingCopyFeedback = false;
+                            ColorHexText.Text = hexWithPrefix;
                             timer.Stop();
                         };
                         timer.Start();

@@ -470,32 +470,34 @@
         </TextBlock>
         
         <!-- 放大镜与拾色器 UI -->
-        <Border x:Name="MagnifierUI" 
-                Visibility="Collapsed"
-                Panel.ZIndex="999"
-                IsHitTestVisible="False"
-                Width="140"
-                Background="#F5F5F5"
-                BorderBrush="#DFDFDF"
-                BorderThickness="1"
-                CornerRadius="8"
-                ClipToBounds="True">
-            <Border.Effect>
-                <DropShadowEffect BlurRadius="8" ShadowDepth="2" Opacity="0.2"/>
-            </Border.Effect>
-            <StackPanel>
-                <Grid Width="140" Height="140" Background="Black">
-                    <Image x:Name="MagnifierImage" 
-                           RenderOptions.BitmapScalingMode="NearestNeighbor"
-                           Stretch="Fill"/>
-                    <Path Stroke="#0078D4" StrokeThickness="1" Data="M70,0 L70,140 M0,70 L140,70"/>
-                </Grid>
-                <StackPanel Margin="8,6">
-                    <TextBlock x:Name="ColorRGBText" FontSize="11" FontFamily="Consolas" Foreground="#333333" HorizontalAlignment="Center"/>
-                    <TextBlock x:Name="ColorHexText" FontSize="12" FontWeight="Bold" FontFamily="Consolas" Foreground="#333333" HorizontalAlignment="Center" Margin="0,2,0,0"/>
-                    <TextBlock Text="按 Ctrl + C 复制色值" FontSize="10" Foreground="#888888" HorizontalAlignment="Center" Margin="0,4,0,0"/>
+        <Grid x:Name="MagnifierUI" 
+              Visibility="Collapsed"
+              Panel.ZIndex="999"
+              IsHitTestVisible="False"
+              Width="150">
+            <Grid.Effect>
+                <DropShadowEffect BlurRadius="10" ShadowDepth="2" Opacity="0.25"/>
+            </Grid.Effect>
+
+            <Border Background="#F5F5F5" CornerRadius="8">
+                <StackPanel>
+                    <Border Height="150" CornerRadius="8,8,0,0" ClipToBounds="True">
+                        <Grid Background="Black">
+                            <Image x:Name="MagnifierImage" 
+                                   RenderOptions.BitmapScalingMode="NearestNeighbor"
+                                   Stretch="Fill"/>
+                            <Path Stroke="#0078D4" StrokeThickness="1" Data="M75,0 L75,150 M0,75 L150,75"/>
+                        </Grid>
+                    </Border>
+                    <StackPanel Margin="8,10,8,12">
+                        <TextBlock x:Name="ColorRGBText" FontSize="13" FontWeight="SemiBold" FontFamily="Consolas" Foreground="#555555" HorizontalAlignment="Center"/>
+                        <TextBlock x:Name="ColorHexText" FontSize="16" FontWeight="Bold" FontFamily="Consolas" Foreground="#222222" HorizontalAlignment="Center" Margin="0,4,0,0"/>
+                        <TextBlock Text="按 C 键复制色值" FontSize="11" FontWeight="Medium" Foreground="#888888" HorizontalAlignment="Center" Margin="0,6,0,0"/>
+                    </StackPanel>
                 </StackPanel>
-            </StackPanel>
-        </Border>
+            </Border>
+
+            <Border BorderBrush="#DFDFDF" BorderThickness="1" CornerRadius="8" IsHitTestVisible="False" />
+        </Grid>
     </Canvas>
 </Window>
