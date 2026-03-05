@@ -924,11 +924,13 @@ namespace PathSnip
                     dpiY = 96.0 * source.CompositionTarget.TransformToDevice.M22;
                 }
 
-                int cropX = (int)((rect.Left + screenPos.X) * dpiX / 96.0);
-                int cropY = (int)((rect.Top + screenPos.Y) * dpiY / 96.0);
+                int cropX = (int)(rect.Left * dpiX / 96.0);
+                int cropY = (int)(rect.Top * dpiY / 96.0);
                 int cropW = (int)(rect.Width * dpiX / 96.0);
                 int cropH = (int)(rect.Height * dpiY / 96.0);
 
+                cropX = Math.Max(0, cropX);
+                cropY = Math.Max(0, cropY);
                 cropW = Math.Min(cropW, background.PixelWidth - cropX);
                 cropH = Math.Min(cropH, background.PixelHeight - cropY);
 
@@ -941,7 +943,7 @@ namespace PathSnip
 
                     var pinnedWindow = new PinnedImageWindow();
                     pinnedWindow.SetImage(cropped);
-                    pinnedWindow.SetBounds(screenLeft, screenTop, cropW, cropH);
+                    pinnedWindow.SetBounds(screenLeft, screenTop, rect.Width, rect.Height);
                     pinnedWindow.Show();
 
                     CancelCapture();

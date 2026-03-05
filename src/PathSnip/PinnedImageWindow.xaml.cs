@@ -32,8 +32,8 @@ namespace PathSnip
             PinnedImage.Source = image;
 
             double borderPadding = 4;
-            double targetWidth = image.PixelWidth;
-            double targetHeight = image.PixelHeight;
+            double targetWidth = image.Width;
+            double targetHeight = image.Height;
 
             if (targetWidth > SystemParameters.WorkArea.Width * 0.8)
             {
