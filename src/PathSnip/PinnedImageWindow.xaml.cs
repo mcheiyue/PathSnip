@@ -30,22 +30,27 @@ namespace PathSnip
             if (image == null) return;
 
             PinnedImage.Source = image;
-            Width = image.PixelWidth;
-            Height = image.PixelHeight;
 
-            if (Width > SystemParameters.WorkArea.Width * 0.8)
+            double borderPadding = 4;
+            double targetWidth = image.PixelWidth;
+            double targetHeight = image.PixelHeight;
+
+            if (targetWidth > SystemParameters.WorkArea.Width * 0.8)
             {
-                double scale = (SystemParameters.WorkArea.Width * 0.8) / Width;
-                Width = SystemParameters.WorkArea.Width * 0.8;
-                Height = image.PixelHeight * scale;
+                double scale = (SystemParameters.WorkArea.Width * 0.8) / targetWidth;
+                targetWidth = SystemParameters.WorkArea.Width * 0.8;
+                targetHeight = targetHeight * scale;
             }
 
-            if (Height > SystemParameters.WorkArea.Height * 0.8)
+            if (targetHeight > SystemParameters.WorkArea.Height * 0.8)
             {
-                double scale = (SystemParameters.WorkArea.Height * 0.8) / Height;
-                Height = SystemParameters.WorkArea.Height * 0.8;
-                Width = image.PixelWidth * scale;
+                double scale = (SystemParameters.WorkArea.Height * 0.8) / targetHeight;
+                targetHeight = SystemParameters.WorkArea.Height * 0.8;
+                targetWidth = targetWidth * scale;
             }
+
+            Width = targetWidth + borderPadding;
+            Height = targetHeight + borderPadding;
 
             var screenCenter = new Point(
                 SystemParameters.WorkArea.Width / 2 - Width / 2,
@@ -54,14 +59,15 @@ namespace PathSnip
             Top = screenCenter.Y;
         }
 
-        public void SetBounds(double left, double top, double width, double height)
+        public void SetBounds(double screenLeft, double screenTop, double logicalWidth, double logicalHeight)
         {
-            if (width <= 0 || height <= 0) return;
+            if (logicalWidth <= 0 || logicalHeight <= 0) return;
 
-            Width = width;
-            Height = height;
-            Left = left;
-            Top = top;
+            double borderPadding = 4;
+            Width = logicalWidth + borderPadding;
+            Height = logicalHeight + borderPadding;
+            Left = screenLeft - borderPadding / 2;
+            Top = screenTop - borderPadding / 2;
         }
 
         private void Window_MouseLeftButtonDown(object sender, MouseButtonEventArgs e)
@@ -69,8 +75,7 @@ namespace PathSnip
             if (e.ClickCount == 1)
             {
                 _isDragging = true;
-                var screenPos = e.GetPosition(this);
-                _dragStartPoint = new Point(Left + screenPos.X, Top + screenPos.Y);
+                _dragStartPoint = e.GetPosition(this);
                 CaptureMouse();
             }
         }
@@ -79,9 +84,9 @@ namespace PathSnip
         {
             if (_isDragging)
             {
-                var screenPos = e.GetPosition(this);
-                Left = _dragStartPoint.X - screenPos.X;
-                Top = _dragStartPoint.Y - screenPos.Y;
+                var screenPos = PointToScreen(e.GetPosition(this));
+                Left = screenPos.X - _dragStartPoint.X;
+                Top = screenPos.Y - _dragStartPoint.Y;
             }
         }
 
