@@ -14,14 +14,6 @@ namespace PathSnip.Services
     {
         #region Win32 API
 
-        /// <summary>
-        /// 枚举所有顶层窗口
-        /// </summary>
-        private delegate bool EnumWindowsProc(IntPtr hWnd, IntPtr lParam);
-
-        [DllImport("user32.dll")]
-        private static extern bool EnumWindows(EnumWindowsProc lpEnumFunc, IntPtr lParam);
-
         [DllImport("user32.dll")]
         private static extern bool IsWindowVisible(IntPtr hWnd);
 
@@ -32,15 +24,6 @@ namespace PathSnip.Services
         private static extern bool GetWindowRect(IntPtr hWnd, out RECT lpRect);
 
         [DllImport("user32.dll")]
-        private static extern IntPtr GetWindow(IntPtr hWnd, uint uCmd);
-
-        [DllImport("user32.dll", CharSet = CharSet.Unicode)]
-        private static extern int GetWindowText(IntPtr hWnd, System.Text.StringBuilder lpString, int nMaxCount);
-
-        [DllImport("user32.dll")]
-        private static extern int GetWindowTextLength(IntPtr hWnd);
-
-        [DllImport("user32.dll")]
         private static extern bool IsIconic(IntPtr hWnd);
 
         [DllImport("user32.dll")]
@@ -48,9 +31,6 @@ namespace PathSnip.Services
 
         [DllImport("user32.dll")]
         private static extern IntPtr GetAncestor(IntPtr hwnd, uint gaFlags);
-
-        [DllImport("user32.dll")]
-        private static extern bool GetCursorPos(out POINT lpPoint);
 
         [StructLayout(LayoutKind.Sequential)]
         private struct POINT
@@ -96,12 +76,8 @@ namespace PathSnip.Services
         private const int DWMWA_EXTENDED_FRAME_BOUNDS = 9;
         private const int DWMWA_CLOAKED = 14;
 
-        // GetWindow 命令
-        private const uint GW_OWNER = 4;
-
         // GetAncestor 命令
         private const uint GA_ROOT = 2;
-        private const uint GA_ROOTOWNER = 3;
 
         #endregion
 
@@ -133,7 +109,7 @@ namespace PathSnip.Services
                     candidateBounds = new RECT();
             }
 
-            hWnd = GetAncestor(hWnd, GA_ROOTOWNER);
+            hWnd = GetAncestor(hWnd, GA_ROOT);
 
             if (hWnd == IntPtr.Zero)
                 return null;

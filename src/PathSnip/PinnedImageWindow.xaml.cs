@@ -59,7 +59,8 @@ namespace PathSnip
             if (e.ClickCount == 1)
             {
                 _isDragging = true;
-                _dragStartPoint = e.GetPosition(this);
+                var screenPos = e.GetPosition(this);
+                _dragStartPoint = new Point(Left + screenPos.X, Top + screenPos.Y);
                 CaptureMouse();
             }
         }
@@ -68,12 +69,9 @@ namespace PathSnip
         {
             if (_isDragging)
             {
-                var currentPos = e.GetPosition(this);
-                double offsetX = currentPos.X - _dragStartPoint.X;
-                double offsetY = currentPos.Y - _dragStartPoint.Y;
-
-                Left += offsetX;
-                Top += offsetY;
+                var screenPos = e.GetPosition(this);
+                Left = _dragStartPoint.X - screenPos.X;
+                Top = _dragStartPoint.Y - screenPos.Y;
             }
         }
 
@@ -130,6 +128,24 @@ namespace PathSnip
         }
 
         private void Window_MouseRightButtonDown(object sender, MouseButtonEventArgs e)
+        {
+            // 右键显示提示
+            OpacityHint.Text = "右键/双击关闭贴图";
+            OpacityHint.Visibility = Visibility.Visible;
+            
+            var timer = new System.Windows.Threading.DispatcherTimer
+            {
+                Interval = TimeSpan.FromSeconds(2)
+            };
+            timer.Tick += (s, args) =>
+            {
+                OpacityHint.Visibility = Visibility.Collapsed;
+                timer.Stop();
+            };
+            timer.Start();
+        }
+
+        private void Window_MouseDoubleClick(object sender, MouseButtonEventArgs e)
         {
             Close();
         }

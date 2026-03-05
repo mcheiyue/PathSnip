@@ -12,7 +12,8 @@
         MouseMove="Window_MouseMove"
         MouseLeftButtonUp="Window_MouseLeftButtonUp"
         MouseWheel="Window_MouseWheel"
-        MouseRightButtonDown="Window_MouseRightButtonDown">
+        MouseRightButtonDown="Window_MouseRightButtonDown"
+        MouseDoubleClick="Window_MouseDoubleClick">
     <Border Background="White"
             CornerRadius="4"
             BorderBrush="#E0E0E0"
