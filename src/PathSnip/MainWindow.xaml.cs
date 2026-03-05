@@ -1,5 +1,6 @@
 using System;
 using System.Diagnostics;
+using System.Threading.Tasks;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Input;
@@ -30,7 +31,7 @@ namespace PathSnip
                 this.Hide();
 
                 // 使用 Send 优先级确保立即执行
-                Dispatcher.BeginInvoke(new Action(() =>
+                _ = Dispatcher.BeginInvoke(new Action(() =>
                 {
                     try
                     {
@@ -76,7 +77,13 @@ namespace PathSnip
                 var modifiers = ParseModifiers(modifiersStr);
                 var key = (Key)Enum.Parse(typeof(Key), keyStr);
 
-                _hotkeyService.Register(modifiers, key, OnHotkeyPressed);
+                var registerSuccess = _hotkeyService.Register(modifiers, key, OnHotkeyPressed);
+                if (!registerSuccess)
+                {
+                    TrayIcon.ShowBalloonTip("PathSnip", $"热键 {modifiersStr}+{keyStr} 注册失败，可能已被占用，请在设置中更换。", Hardcodet.Wpf.TaskbarNotification.BalloonIcon.Warning);
+                    LogService.Log($"热键注册失败: {modifiersStr}+{keyStr}");
+                    return;
+                }
 
                 // 更新菜单显示的快捷键
                 UpdateMenuHotkeyText();
@@ -127,12 +134,17 @@ namespace PathSnip
             _hotkeyService = service;
         }
 
+        public void ShowTrayNotification(string message, Hardcodet.Wpf.TaskbarNotification.BalloonIcon icon)
+        {
+            TrayIcon.ShowBalloonTip("PathSnip", message, icon);
+        }
+
         private void OnHotkeyPressed()
         {
             StartCapture();
         }
 
-        private void OnCaptureCompleted(Rect region)
+        private async void OnCaptureCompleted(Rect region)
         {
             try
             {
@@ -154,17 +166,29 @@ namespace PathSnip
                 switch (config.ClipboardMode)
                 {
                     case ClipboardMode.ImageOnly:
-                        ClipboardService.SetImage(bitmap);
+                        if (!await ClipboardService.TrySetImageAsync(bitmap))
+                        {
+                            notifyMsg = "已保存，但复制图片失败";
+                            break;
+                        }
                         notifyMsg = "已保存并复制图片";
                         break;
                     case ClipboardMode.ImageAndPath:
                         var formattedPathForImageAndPath = ClipboardService.FormatPath(filePath, config.PathFormat);
-                        ClipboardService.SetImageAndPath(bitmap, formattedPathForImageAndPath);
+                        if (!await ClipboardService.TrySetImageAndPathAsync(bitmap, formattedPathForImageAndPath))
+                        {
+                            notifyMsg = "已保存，但复制图片和路径失败";
+                            break;
+                        }
                         notifyMsg = "已保存并复制图片和路径";
                         break;
                     default:
                         var formattedPath = ClipboardService.FormatPath(filePath, config.PathFormat);
-                        ClipboardService.SetText(formattedPath);
+                        if (!await ClipboardService.TrySetTextAsync(formattedPath))
+                        {
+                            notifyMsg = "已保存，但复制路径失败";
+                            break;
+                        }
                         notifyMsg = "已保存并复制路径";
                         break;
                 }
@@ -184,7 +208,7 @@ namespace PathSnip
             }
             finally
             {
-                Dispatcher.BeginInvoke(new Action(() =>
+                _ = Dispatcher.BeginInvoke(new Action(() =>
                 {
                     _captureWindow?.Close();
                     _captureWindow = null;
@@ -194,7 +218,7 @@ namespace PathSnip
             }
         }
 
-        private void OnCaptureCompletedWithImage(System.Windows.Media.Imaging.BitmapSource bitmap)
+        private async void OnCaptureCompletedWithImage(System.Windows.Media.Imaging.BitmapSource bitmap)
         {
             string filePath = null;
             try
@@ -207,17 +231,29 @@ namespace PathSnip
                 switch (config.ClipboardMode)
                 {
                     case ClipboardMode.ImageOnly:
-                        ClipboardService.SetImage(bitmap);
+                        if (!await ClipboardService.TrySetImageAsync(bitmap))
+                        {
+                            notifyMsg = "已保存，但复制图片失败";
+                            break;
+                        }
                         notifyMsg = "已保存并复制图片";
                         break;
                     case ClipboardMode.ImageAndPath:
                         var formattedPathForImageAndPath = ClipboardService.FormatPath(filePath, config.PathFormat);
-                        ClipboardService.SetImageAndPath(bitmap, formattedPathForImageAndPath);
+                        if (!await ClipboardService.TrySetImageAndPathAsync(bitmap, formattedPathForImageAndPath))
+                        {
+                            notifyMsg = "已保存，但复制图片和路径失败";
+                            break;
+                        }
                         notifyMsg = "已保存并复制图片和路径";
                         break;
                     default:
                         var formattedPath = ClipboardService.FormatPath(filePath, config.PathFormat);
-                        ClipboardService.SetText(formattedPath);
+                        if (!await ClipboardService.TrySetTextAsync(formattedPath))
+                        {
+                            notifyMsg = "已保存，但复制路径失败";
+                            break;
+                        }
                         notifyMsg = "已保存并复制路径";
                         break;
                 }
@@ -234,15 +270,14 @@ namespace PathSnip
                 // 保存失败时，仍尝试复制图片
                 if (filePath == null)
                 {
-                    try
+                    if (await ClipboardService.TrySetImageAsync(bitmap))
                     {
-                        ClipboardService.SetImage(bitmap);
                         LogService.Log("保存失败，但图片已复制到剪贴板");
                         TrayIcon.ShowBalloonTip("PathSnip", "保存失败，图片已复制到剪贴板", Hardcodet.Wpf.TaskbarNotification.BalloonIcon.Warning);
                     }
-                    catch
+                    else
                     {
-                        // 静默失败
+                        LogService.Log("保存失败，且复制图片到剪贴板失败");
                     }
                 }
                 else
@@ -253,7 +288,7 @@ namespace PathSnip
             }
             finally
             {
-                Dispatcher.BeginInvoke(new Action(() =>
+                _ = Dispatcher.BeginInvoke(new Action(() =>
                 {
                     _captureWindow?.Close();
                     _captureWindow = null;
@@ -265,7 +300,7 @@ namespace PathSnip
 
         private void OnCaptureCancelled()
         {
-            Dispatcher.BeginInvoke(new Action(() =>
+            _ = Dispatcher.BeginInvoke(new Action(() =>
             {
                 _captureWindow?.Close();
                 _captureWindow = null;

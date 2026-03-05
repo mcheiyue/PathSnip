@@ -1,5 +1,4 @@
 using System;
-using System.Collections.Generic;
 using System.Runtime.InteropServices;
 using System.Windows;
 using System.Windows.Interop;
@@ -13,6 +12,11 @@ namespace PathSnip.Services
     public static class WindowDetectionService
     {
         #region Win32 API
+
+        private delegate bool EnumWindowsProc(IntPtr hWnd, IntPtr lParam);
+
+        [DllImport("user32.dll")]
+        private static extern bool EnumWindows(EnumWindowsProc lpEnumFunc, IntPtr lParam);
 
         [DllImport("user32.dll")]
         private static extern bool IsWindowVisible(IntPtr hWnd);
@@ -69,9 +73,6 @@ namespace PathSnip.Services
         // 窗口样式常量
         private const int GWL_EXSTYLE = -20;
         private const int WS_EX_TRANSPARENT = 0x00000020;
-        private const int WS_EX_TOOLWINDOW = 0x00000080;
-        private const int WS_EX_APPWINDOW = 0x00040000;
-
         // DWM 属性常量
         private const int DWMWA_EXTENDED_FRAME_BOUNDS = 9;
         private const int DWMWA_CLOAKED = 14;
@@ -92,45 +93,15 @@ namespace PathSnip.Services
         public static Rect? GetWindowUnderCursor(Point mousePosition, int excludeProcessId)
         {
             var dpiInfo = GetDpiScale();
-            int screenX = (int)(mousePosition.X * dpiInfo.ScaleX);
-            int screenY = (int)(mousePosition.Y * dpiInfo.ScaleY);
-
-            var point = new POINT { X = screenX, Y = screenY };
-            IntPtr hWnd = WindowFromPoint(point);
-
-            if (hWnd == IntPtr.Zero)
-                return null;
-
-            hWnd = GetAncestor(hWnd, GA_ROOT);
-
-            if (hWnd == IntPtr.Zero)
-                return null;
-
-            if (!IsWindowVisible(hWnd) || IsIconic(hWnd))
-                return null;
-
-            int cloaked;
-            if (DwmGetWindowAttribute(hWnd, DWMWA_CLOAKED, out cloaked, Marshal.SizeOf<int>()) == 0 && cloaked != 0)
-                return null;
-
-            GetWindowThreadProcessId(hWnd, out uint processId);
-            if (processId == excludeProcessId)
-                return null;
-
-            int exStyle = GetWindowLong(hWnd, GWL_EXSTYLE);
-            if ((exStyle & WS_EX_TRANSPARENT) != 0)
-                return null;
+            var point = new POINT
+            {
+                X = (int)(mousePosition.X * dpiInfo.ScaleX),
+                Y = (int)(mousePosition.Y * dpiInfo.ScaleY)
+            };
 
             RECT bounds;
-            if (DwmGetWindowAttribute(hWnd, DWMWA_EXTENDED_FRAME_BOUNDS, out bounds, Marshal.SizeOf<RECT>()) != 0)
-            {
-                if (!GetWindowRect(hWnd, out bounds))
-                    return null;
-            }
-
-            // 二次校验：鼠标是否在检测到的窗口范围内
-            if (screenX < bounds.Left || screenX > bounds.Right ||
-                screenY < bounds.Top || screenY > bounds.Bottom)
+            if (!TryGetWindowByPoint(point, excludeProcessId, out bounds) &&
+                !TryGetWindowByEnum(point, excludeProcessId, out bounds))
             {
                 return null;
             }
@@ -140,6 +111,93 @@ namespace PathSnip.Services
                 bounds.Top / dpiInfo.ScaleY,
                 (bounds.Right - bounds.Left) / dpiInfo.ScaleX,
                 (bounds.Bottom - bounds.Top) / dpiInfo.ScaleY);
+        }
+
+        private static bool TryGetWindowByPoint(POINT point, int excludeProcessId, out RECT bounds)
+        {
+            bounds = default(RECT);
+
+            IntPtr hWnd = WindowFromPoint(point);
+            if (hWnd == IntPtr.Zero)
+                return false;
+
+            hWnd = GetAncestor(hWnd, GA_ROOT);
+            if (hWnd == IntPtr.Zero)
+                return false;
+
+            if (!IsValidWindowCandidate(hWnd, excludeProcessId))
+                return false;
+
+            if (!TryGetWindowBounds(hWnd, out bounds))
+                return false;
+
+            return IsPointInRect(point, bounds);
+        }
+
+        private static bool TryGetWindowByEnum(POINT point, int excludeProcessId, out RECT bounds)
+        {
+            bounds = default(RECT);
+            IntPtr targetWindow = IntPtr.Zero;
+            RECT targetBounds = default(RECT);
+
+            EnumWindows((hWnd, lParam) =>
+            {
+                if (!IsValidWindowCandidate(hWnd, excludeProcessId))
+                    return true;
+
+                RECT candidateBounds;
+                if (!TryGetWindowBounds(hWnd, out candidateBounds))
+                    return true;
+
+                if (!IsPointInRect(point, candidateBounds))
+                    return true;
+
+                targetWindow = hWnd;
+                targetBounds = candidateBounds;
+                return false;
+            }, IntPtr.Zero);
+
+            if (targetWindow == IntPtr.Zero)
+                return false;
+
+            bounds = targetBounds;
+            return true;
+        }
+
+        private static bool IsValidWindowCandidate(IntPtr hWnd, int excludeProcessId)
+        {
+            if (!IsWindowVisible(hWnd) || IsIconic(hWnd))
+                return false;
+
+            int cloaked;
+            if (DwmGetWindowAttribute(hWnd, DWMWA_CLOAKED, out cloaked, Marshal.SizeOf<int>()) == 0 && cloaked != 0)
+                return false;
+
+            GetWindowThreadProcessId(hWnd, out uint processId);
+            if (processId == excludeProcessId)
+                return false;
+
+            int exStyle = GetWindowLong(hWnd, GWL_EXSTYLE);
+            if ((exStyle & WS_EX_TRANSPARENT) != 0)
+                return false;
+
+            return true;
+        }
+
+        private static bool TryGetWindowBounds(IntPtr hWnd, out RECT bounds)
+        {
+            if (DwmGetWindowAttribute(hWnd, DWMWA_EXTENDED_FRAME_BOUNDS, out bounds, Marshal.SizeOf<RECT>()) == 0)
+                return true;
+
+            return GetWindowRect(hWnd, out bounds);
+        }
+
+        private static bool IsPointInRect(POINT point, RECT rect)
+        {
+            return point.X >= rect.Left &&
+                   point.X <= rect.Right &&
+                   point.Y >= rect.Top &&
+                   point.Y <= rect.Bottom;
         }
 
         /// <summary>

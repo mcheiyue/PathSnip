@@ -31,8 +31,15 @@ namespace PathSnip
             var key = (Key)Enum.Parse(typeof(Key), config.HotkeyKey);
 
             _hotkeyService = new HotkeyService();
-            _hotkeyService.Register(modifiers, key, OnHotkeyPressed);
+            var registerSuccess = _hotkeyService.Register(modifiers, key, OnHotkeyPressed);
             _mainWindow.SetHotkeyService(_hotkeyService);
+
+            if (!registerSuccess)
+            {
+                _mainWindow.ShowTrayNotification($"热键 {config.HotkeyModifiers}+{config.HotkeyKey} 注册失败，可能已被占用，请在设置中更换。", Hardcodet.Wpf.TaskbarNotification.BalloonIcon.Warning);
+                LogService.Log($"PathSnip 启动完成，但热键注册失败 ({config.HotkeyModifiers}+{config.HotkeyKey})");
+                return;
+            }
 
             LogService.Log($"PathSnip 启动完成，热键已注册 ({config.HotkeyModifiers}+{config.HotkeyKey})");
         }

@@ -1,4 +1,6 @@
 using System;
+using System.Threading;
+using System.Threading.Tasks;
 using System.Windows;
 using System.Windows.Media.Imaging;
 
@@ -6,6 +8,46 @@ namespace PathSnip.Services
 {
     public static class ClipboardService
     {
+        public static Task<bool> TrySetTextAsync(string text)
+        {
+            return RunStaClipboardActionAsync(() => SetText(text));
+        }
+
+        public static Task<bool> TrySetImageAsync(BitmapSource bitmap)
+        {
+            return RunStaClipboardActionAsync(() => SetImage(bitmap));
+        }
+
+        public static Task<bool> TrySetImageAndPathAsync(BitmapSource bitmap, string path)
+        {
+            return RunStaClipboardActionAsync(() => SetImageAndPath(bitmap, path));
+        }
+
+        private static Task<bool> RunStaClipboardActionAsync(Action action)
+        {
+            var tcs = new TaskCompletionSource<bool>();
+
+            var thread = new Thread(() =>
+            {
+                try
+                {
+                    action();
+                    tcs.TrySetResult(true);
+                }
+                catch (Exception ex)
+                {
+                    LogService.LogError("异步剪贴板操作失败", ex);
+                    tcs.TrySetResult(false);
+                }
+            });
+
+            thread.SetApartmentState(ApartmentState.STA);
+            thread.IsBackground = true;
+            thread.Start();
+
+            return tcs.Task;
+        }
+
         public static void SetText(string text)
         {
             for (int i = 0; i < 3; i++)

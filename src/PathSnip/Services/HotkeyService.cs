@@ -14,6 +14,12 @@ namespace PathSnip.Services
         private int _hotkeyId = 9000;
         private bool _isRegistered;
 
+        private static string FormatHotkey(ModifierKeys modifiers, Key key)
+        {
+            var modifierText = modifiers.ToString().Replace(", ", "+");
+            return string.IsNullOrWhiteSpace(modifierText) ? key.ToString() : $"{modifierText}+{key}";
+        }
+
         [DllImport("user32.dll")]
         private static extern bool RegisterHotKey(IntPtr hWnd, int id, uint fsModifiers, uint vk);
 
@@ -38,14 +44,15 @@ namespace PathSnip.Services
             uint vk = (uint)KeyInterop.VirtualKeyFromKey(key);
 
             _isRegistered = RegisterHotKey(_windowHandle, _hotkeyId, fsModifiers, vk);
+            var hotkeyDisplay = FormatHotkey(modifiers, key);
 
             if (!_isRegistered)
             {
-                LogService.Log($"热键注册失败: Ctrl+Shift+A 可能已被其他程序占用");
+                LogService.Log($"热键注册失败: {hotkeyDisplay} 可能已被其他程序占用");
             }
             else
             {
-                LogService.Log($"热键注册成功: Ctrl+Shift+A");
+                LogService.Log($"热键注册成功: {hotkeyDisplay}");
             }
 
             // 存储回调（这里简化处理，实际可以用字典存储多个回调）
