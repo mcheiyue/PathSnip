@@ -23,6 +23,7 @@
         <Grid>
             <Image x:Name="PinnedImage"
                    Stretch="Uniform"
+                   RenderTransformOrigin="0.5,0.5"
                    RenderOptions.BitmapScalingMode="HighQuality" />
             
             <!-- 透明度提示 -->

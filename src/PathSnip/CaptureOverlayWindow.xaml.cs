@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Diagnostics;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Controls.Primitives;
@@ -74,7 +75,8 @@ namespace PathSnip
         // 放大镜相关变量
         private string _currentColorHex = "";
         private bool _isShowingCopyFeedback = false;
-        private DateTime _lastMagnifierUpdateTime = DateTime.MinValue;
+        private static readonly Stopwatch _stopwatch = Stopwatch.StartNew();
+        private long _lastMagnifierUpdateTime;
         private Point _lastMagnifierPosition;
         private const int MagnifierThrottleMs = 16; // 约60fps
         private const double MagnifierMoveThreshold = 2; // 位移小于2像素不重算
@@ -309,8 +311,8 @@ namespace PathSnip
                 MagnifierUI.Visibility = Visibility.Visible;
 
                 // 放大镜更新 - 节流优化
-                var nowMs = DateTime.Now;
-                var timeSinceLastUpdate = (nowMs - _lastMagnifierUpdateTime).TotalMilliseconds;
+                var nowMs = _stopwatch.ElapsedMilliseconds;
+                var timeSinceLastUpdate = nowMs - _lastMagnifierUpdateTime;
                 var distance = Math.Sqrt(
                     Math.Pow(mousePos.X - _lastMagnifierPosition.X, 2) +
                     Math.Pow(mousePos.Y - _lastMagnifierPosition.Y, 2));
@@ -907,6 +909,9 @@ namespace PathSnip
             if (BackgroundImage.Source is BitmapSource background)
             {
                 var rect = _currentRect;
+                if (rect.Width <= 0 || rect.Height <= 0)
+                    return;
+
                 PresentationSource source = PresentationSource.FromVisual(this);
                 double dpiX = 96.0, dpiY = 96.0;
                 if (source?.CompositionTarget != null)
@@ -934,7 +939,10 @@ namespace PathSnip
                     pinnedWindow.SetImage(cropped);
                     pinnedWindow.Show();
                 }
-                catch { }
+                catch (Exception ex)
+                {
+                    LogService.Log($"贴图失败: {ex.Message}");
+                }
             }
         }
 
@@ -945,7 +953,8 @@ namespace PathSnip
                 CancelCapture();
                 e.Handled = true;
             }
-            else if (e.Key == Key.T && Toolbar.Visibility == Visibility.Visible)
+            else if (e.Key == Key.T && Toolbar.Visibility == Visibility.Visible &&
+                     _currentRect.Width > 0 && _currentRect.Height > 0)
             {
                 PinBtn_Click(this, new RoutedEventArgs());
                 e.Handled = true;

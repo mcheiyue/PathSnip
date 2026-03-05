@@ -11,6 +11,8 @@ namespace PathSnip.Helpers
     /// </summary>
     public static class MagnifierHelper
     {
+        private static BitmapSource _cachedSource;
+        private static int _cachedSourceHash;
         private static BitmapSource _cachedMagnifiedRegion;
         private static int _cachedPixelX;
         private static int _cachedPixelY;
@@ -70,7 +72,8 @@ namespace PathSnip.Helpers
 
             lock (_cacheLock)
             {
-                if (_cachedMagnifiedRegion != null &&
+                if (_cachedSource == source &&
+                    _cachedSourceHash == source.GetHashCode() &&
                     _cachedPixelX == pixelX &&
                     _cachedPixelY == pixelY &&
                     _cachedCaptureSize == captureSize)
@@ -95,9 +98,12 @@ namespace PathSnip.Helpers
 
                 int targetSize = captureSize * (int)scale;
                 var result = EnsureSize(scaled, targetSize, targetSize);
+                result.Freeze();
 
                 lock (_cacheLock)
                 {
+                    _cachedSource = source;
+                    _cachedSourceHash = source.GetHashCode();
                     _cachedMagnifiedRegion = result;
                     _cachedPixelX = pixelX;
                     _cachedPixelY = pixelY;
