@@ -914,8 +914,8 @@ namespace PathSnip
 
                 double virtualScreenLeft = SystemParameters.VirtualScreenLeft;
                 double virtualScreenTop = SystemParameters.VirtualScreenTop;
-                double screenLeft = rect.Left - virtualScreenLeft;
-                double screenTop = rect.Top - virtualScreenTop;
+                double screenLeft = rect.Left + virtualScreenLeft;
+                double screenTop = rect.Top + virtualScreenTop;
 
                 PresentationSource source = PresentationSource.FromVisual(this);
                 double dpiX = 96.0, dpiY = 96.0;
@@ -925,8 +925,8 @@ namespace PathSnip
                     dpiY = 96.0 * source.CompositionTarget.TransformToDevice.M22;
                 }
 
-                int cropX = (int)((rect.Left - virtualScreenLeft) * dpiX / 96.0);
-                int cropY = (int)((rect.Top - virtualScreenTop) * dpiY / 96.0);
+                int cropX = (int)((rect.Left + virtualScreenLeft) * dpiX / 96.0);
+                int cropY = (int)((rect.Top + virtualScreenTop) * dpiY / 96.0);
                 int cropW = (int)(rect.Width * dpiX / 96.0);
                 int cropH = (int)(rect.Height * dpiY / 96.0);
 

@@ -30,6 +30,13 @@ namespace PathSnip
             if (image == null) return;
 
             PinnedImage.Source = image;
+        }
+
+        public void SetImageWithCenter(BitmapSource image)
+        {
+            if (image == null) return;
+
+            PinnedImage.Source = image;
 
             double borderPadding = 4;
             double targetWidth = image.Width;
