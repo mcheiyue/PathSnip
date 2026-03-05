@@ -43,6 +43,22 @@ namespace PathSnip.Services
         [DllImport("user32.dll")]
         private static extern bool IsIconic(IntPtr hWnd);
 
+        [DllImport("user32.dll")]
+        private static extern IntPtr WindowFromPoint(POINT point);
+
+        [DllImport("user32.dll")]
+        private static extern IntPtr GetAncestor(IntPtr hwnd, uint gaFlags);
+
+        [DllImport("user32.dll")]
+        private static extern bool GetCursorPos(out POINT lpPoint);
+
+        [StructLayout(LayoutKind.Sequential)]
+        private struct POINT
+        {
+            public int X;
+            public int Y;
+        }
+
         /// <summary>
         /// 获取窗口扩展样式
         /// </summary>
@@ -83,6 +99,10 @@ namespace PathSnip.Services
         // GetWindow 命令
         private const uint GW_OWNER = 4;
 
+        // GetAncestor 命令
+        private const uint GA_ROOT = 2;
+        private const uint GA_ROOTOWNER = 3;
+
         #endregion
 
         #region 公共方法
@@ -95,74 +115,43 @@ namespace PathSnip.Services
         /// <returns>窗口边界矩形，如未检测到则返回 null</returns>
         public static Rect? GetWindowUnderCursor(Point mousePosition, int excludeProcessId)
         {
-            IntPtr targetHwnd = IntPtr.Zero;
-
-            // 转换为屏幕坐标（物理像素）
             var dpiInfo = GetDpiScale();
             int screenX = (int)(mousePosition.X * dpiInfo.ScaleX);
             int screenY = (int)(mousePosition.Y * dpiInfo.ScaleY);
 
-            // 查找鼠标下的窗口
-            EnumWindows((hWnd, lParam) =>
-            {
-                if (!IsWindowVisible(hWnd) || IsIconic(hWnd))
-                    return true;
+            var point = new POINT { X = screenX, Y = screenY };
+            IntPtr hWnd = WindowFromPoint(point);
 
-                int cloaked;
-                if (DwmGetWindowAttribute(hWnd, DWMWA_CLOAKED, out cloaked, Marshal.SizeOf<int>()) == 0 && cloaked != 0)
-                    return true;
-
-                // 排除自身进程
-                GetWindowThreadProcessId(hWnd, out uint processId);
-                if (processId == excludeProcessId)
-                    return true;
-
-                // 排除透明窗口
-                int exStyle = GetWindowLong(hWnd, GWL_EXSTYLE);
-                if ((exStyle & WS_EX_TRANSPARENT) != 0)
-                    return true;
-
-                // 使用 DWM 获取真实窗口边界（排除阴影）
-                RECT dwmRect;
-                if (DwmGetWindowAttribute(hWnd, DWMWA_EXTENDED_FRAME_BOUNDS, out dwmRect, Marshal.SizeOf<RECT>()) == 0)
-                {
-                    // 检查鼠标是否在窗口范围内
-                    if (screenX >= dwmRect.Left && screenX <= dwmRect.Right &&
-                        screenY >= dwmRect.Top && screenY <= dwmRect.Bottom)
-                    {
-                        targetHwnd = hWnd;
-                        return false; // 找到目标，停止枚举
-                    }
-                }
-                else
-                {
-                    // DWM 失败时回退到 GetWindowRect
-                    if (GetWindowRect(hWnd, out RECT rect))
-                    {
-                        if (screenX >= rect.Left && screenX <= rect.Right &&
-                            screenY >= rect.Top && screenY <= rect.Bottom)
-                        {
-                            targetHwnd = hWnd;
-                            return false;
-                        }
-                    }
-                }
-
-                return true;
-            }, IntPtr.Zero);
-
-            if (targetHwnd == IntPtr.Zero)
+            if (hWnd == IntPtr.Zero)
                 return null;
 
-            // 获取目标窗口的 DWM 边界
+            hWnd = GetAncestor(hWnd, GA_ROOTOWNER);
+
+            if (hWnd == IntPtr.Zero)
+                return null;
+
+            if (!IsWindowVisible(hWnd) || IsIconic(hWnd))
+                return null;
+
+            int cloaked;
+            if (DwmGetWindowAttribute(hWnd, DWMWA_CLOAKED, out cloaked, Marshal.SizeOf<int>()) == 0 && cloaked != 0)
+                return null;
+
+            GetWindowThreadProcessId(hWnd, out uint processId);
+            if (processId == excludeProcessId)
+                return null;
+
+            int exStyle = GetWindowLong(hWnd, GWL_EXSTYLE);
+            if ((exStyle & WS_EX_TRANSPARENT) != 0)
+                return null;
+
             RECT bounds;
-            if (DwmGetWindowAttribute(targetHwnd, DWMWA_EXTENDED_FRAME_BOUNDS, out bounds, Marshal.SizeOf<RECT>()) != 0)
+            if (DwmGetWindowAttribute(hWnd, DWMWA_EXTENDED_FRAME_BOUNDS, out bounds, Marshal.SizeOf<RECT>()) != 0)
             {
-                if (!GetWindowRect(targetHwnd, out bounds))
+                if (!GetWindowRect(hWnd, out bounds))
                     return null;
             }
 
-            // 转换为 WPF 逻辑像素坐标
             return new Rect(
                 bounds.Left / dpiInfo.ScaleX,
                 bounds.Top / dpiInfo.ScaleY,
