@@ -925,8 +925,8 @@ namespace PathSnip
                     dpiY = 96.0 * source.CompositionTarget.TransformToDevice.M22;
                 }
 
-                int cropX = (int)((rect.Left + virtualScreenLeft) * dpiX / 96.0);
-                int cropY = (int)((rect.Top + virtualScreenTop) * dpiY / 96.0);
+                int cropX = (int)(rect.Left * dpiX / 96.0);
+                int cropY = (int)(rect.Top * dpiY / 96.0);
                 int cropW = (int)(rect.Width * dpiX / 96.0);
                 int cropH = (int)(rect.Height * dpiY / 96.0);
 
