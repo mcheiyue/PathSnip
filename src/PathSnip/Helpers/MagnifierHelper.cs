@@ -11,6 +11,11 @@ namespace PathSnip.Helpers
     /// </summary>
     public static class MagnifierHelper
     {
+        private static BitmapSource _cachedMagnifiedRegion;
+        private static int _cachedPixelX;
+        private static int _cachedPixelY;
+        private static int _cachedCaptureSize;
+        private static readonly object _cacheLock = new object();
         /// <summary>
         /// 从 BitmapSource 提取单像素颜色（自动处理 DPI）
         /// </summary>
@@ -60,11 +65,20 @@ namespace PathSnip.Helpers
         {
             if (source == null) return null;
 
-            // 转换为物理坐标
             int pixelX = (int)(logicalX * dpiScaleX);
             int pixelY = (int)(logicalY * dpiScaleY);
 
-            // 边界裁剪（防越界）
+            lock (_cacheLock)
+            {
+                if (_cachedMagnifiedRegion != null &&
+                    _cachedPixelX == pixelX &&
+                    _cachedPixelY == pixelY &&
+                    _cachedCaptureSize == captureSize)
+                {
+                    return _cachedMagnifiedRegion;
+                }
+            }
+
             int cropX = Math.Max(0, pixelX - captureSize / 2);
             int cropY = Math.Max(0, pixelY - captureSize / 2);
             int cropW = Math.Min(captureSize, source.PixelWidth - cropX);
@@ -74,16 +88,23 @@ namespace PathSnip.Helpers
 
             try
             {
-                // 裁剪区域
                 var cropped = new CroppedBitmap(source, new Int32Rect(cropX, cropY, cropW, cropH));
 
-                // 放大 400%
                 double scale = 4.0;
                 var scaled = new TransformedBitmap(cropped, new ScaleTransform(scale, scale));
 
-                // 如果边缘不足，补齐尺寸
                 int targetSize = captureSize * (int)scale;
-                return EnsureSize(scaled, targetSize, targetSize);
+                var result = EnsureSize(scaled, targetSize, targetSize);
+
+                lock (_cacheLock)
+                {
+                    _cachedMagnifiedRegion = result;
+                    _cachedPixelX = pixelX;
+                    _cachedPixelY = pixelY;
+                    _cachedCaptureSize = captureSize;
+                }
+
+                return result;
             }
             catch
             {
