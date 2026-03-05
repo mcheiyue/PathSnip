@@ -101,14 +101,6 @@ namespace PathSnip.Services
             if (hWnd == IntPtr.Zero)
                 return null;
 
-            // 先获取候选窗口的边界进行二次校验
-            RECT candidateBounds;
-            if (DwmGetWindowAttribute(hWnd, DWMWA_EXTENDED_FRAME_BOUNDS, out candidateBounds, Marshal.SizeOf<RECT>()) != 0)
-            {
-                if (!GetWindowRect(hWnd, out candidateBounds))
-                    candidateBounds = new RECT();
-            }
-
             hWnd = GetAncestor(hWnd, GA_ROOT);
 
             if (hWnd == IntPtr.Zero)

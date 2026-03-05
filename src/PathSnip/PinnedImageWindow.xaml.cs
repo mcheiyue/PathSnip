@@ -32,49 +32,15 @@ namespace PathSnip
             PinnedImage.Source = image;
         }
 
-        public void SetImageWithCenter(BitmapSource image)
-        {
-            if (image == null) return;
-
-            PinnedImage.Source = image;
-
-            double borderPadding = 4;
-            double targetWidth = image.Width;
-            double targetHeight = image.Height;
-
-            if (targetWidth > SystemParameters.WorkArea.Width * 0.8)
-            {
-                double scale = (SystemParameters.WorkArea.Width * 0.8) / targetWidth;
-                targetWidth = SystemParameters.WorkArea.Width * 0.8;
-                targetHeight = targetHeight * scale;
-            }
-
-            if (targetHeight > SystemParameters.WorkArea.Height * 0.8)
-            {
-                double scale = (SystemParameters.WorkArea.Height * 0.8) / targetHeight;
-                targetHeight = SystemParameters.WorkArea.Height * 0.8;
-                targetWidth = targetWidth * scale;
-            }
-
-            Width = targetWidth + borderPadding;
-            Height = targetHeight + borderPadding;
-
-            var screenCenter = new Point(
-                SystemParameters.WorkArea.Width / 2 - Width / 2,
-                SystemParameters.WorkArea.Height / 2 - Height / 2);
-            Left = screenCenter.X;
-            Top = screenCenter.Y;
-        }
-
         public void SetBounds(double screenLeft, double screenTop, double logicalWidth, double logicalHeight)
         {
             if (logicalWidth <= 0 || logicalHeight <= 0) return;
 
-            double borderPadding = 4;
+            double borderPadding = 8;
             Width = logicalWidth + borderPadding;
             Height = logicalHeight + borderPadding;
-            Left = screenLeft - borderPadding / 2;
-            Top = screenTop - borderPadding / 2;
+            Left = screenLeft - 4;
+            Top = screenTop - 4;
         }
 
         private void Window_MouseLeftButtonDown(object sender, MouseButtonEventArgs e)
