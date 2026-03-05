@@ -397,6 +397,14 @@
                 <!-- 分隔线 -->
                 <Rectangle Width="1" Fill="#E8E8E8" Margin="8,6" RadiusX="0.5" RadiusY="0.5" />
                 
+                <!-- 贴图按钮 -->
+                <Button x:Name="PinBtn" Style="{StaticResource ToolButtonStyle}" ToolTip="贴图 (T)" Click="PinBtn_Click">
+                    <Path Data="M12 17v5M9 10.76a2 2 0 0 1-1.11 1.79l-1.78.9A2 2 0 0 0 5 15.24V16a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1v-.76a2 2 0 0 0-1.11-1.79l-1.78-.9A2 2 0 0 1 15 10.76V7a1 1 0 0 1 1-1a2 2 0 0 0 0-4H8a2 2 0 0 0 0 4a1 1 0 0 1 1 1z" 
+                          Stroke="{Binding Foreground, RelativeSource={RelativeSource AncestorType=Button}}" 
+                          StrokeThickness="2" StrokeStartLineCap="Round" StrokeEndLineCap="Round" StrokeLineJoin="Round" Fill="Transparent"
+                          Stretch="Uniform" Width="16" Height="16" />
+                </Button>
+                
                 <!-- 操作指令 -->
                 <Button x:Name="UndoBtn" Style="{StaticResource ToolButtonStyle}" ToolTip="撤销" Click="UndoBtn_Click">
                     <Path Data="M9 14L4 9l5-5M4 9h10.5a5.5 5.5 0 0 1 5.5 5.5v0a5.5 5.5 0 0 1-5.5 5.5H11" 
