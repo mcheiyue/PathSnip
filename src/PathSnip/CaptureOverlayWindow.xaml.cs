@@ -74,6 +74,10 @@ namespace PathSnip
         // 放大镜相关变量
         private string _currentColorHex = "";
         private bool _isShowingCopyFeedback = false;
+        private DateTime _lastMagnifierUpdateTime = DateTime.MinValue;
+        private Point _lastMagnifierPosition;
+        private const int MagnifierThrottleMs = 16; // 约60fps
+        private const double MagnifierMoveThreshold = 2; // 位移小于2像素不重算
 
         public event Action<Rect> CaptureCompleted;
         public event Action CaptureCancelled;
@@ -304,8 +308,19 @@ namespace PathSnip
                 // 显式恢复放大镜的可见性
                 MagnifierUI.Visibility = Visibility.Visible;
 
-                // 放大镜更新（无节流，直接更新以保证丝滑体验）
-                UpdateMagnifier(mousePos);
+                // 放大镜更新 - 节流优化
+                var nowMs = DateTime.Now;
+                var timeSinceLastUpdate = (nowMs - _lastMagnifierUpdateTime).TotalMilliseconds;
+                var distance = Math.Sqrt(
+                    Math.Pow(mousePos.X - _lastMagnifierPosition.X, 2) +
+                    Math.Pow(mousePos.Y - _lastMagnifierPosition.Y, 2));
+
+                if (timeSinceLastUpdate >= MagnifierThrottleMs || distance >= MagnifierMoveThreshold)
+                {
+                    _lastMagnifierUpdateTime = nowMs;
+                    _lastMagnifierPosition = mousePos;
+                    UpdateMagnifier(mousePos);
+                }
                 return;
             }
 
@@ -887,11 +902,52 @@ namespace PathSnip
             CancelCapture();
         }
 
+        private void PinBtn_Click(object sender, RoutedEventArgs e)
+        {
+            if (BackgroundImage.Source is BitmapSource background)
+            {
+                var rect = _currentRect;
+                PresentationSource source = PresentationSource.FromVisual(this);
+                double dpiX = 96.0, dpiY = 96.0;
+                if (source?.CompositionTarget != null)
+                {
+                    dpiX = 96.0 * source.CompositionTarget.TransformToDevice.M11;
+                    dpiY = 96.0 * source.CompositionTarget.TransformToDevice.M22;
+                }
+
+                int cropX = (int)(rect.Left * dpiX / 96.0);
+                int cropY = (int)(rect.Top * dpiY / 96.0);
+                int cropW = (int)(rect.Width * dpiX / 96.0);
+                int cropH = (int)(rect.Height * dpiY / 96.0);
+
+                cropW = Math.Min(cropW, background.PixelWidth - cropX);
+                cropH = Math.Min(cropH, background.PixelHeight - cropY);
+
+                if (cropW <= 0 || cropH <= 0) return;
+
+                try
+                {
+                    var cropped = new CroppedBitmap(background, new Int32Rect(cropX, cropY, cropW, cropH));
+                    cropped.Freeze();
+
+                    var pinnedWindow = new PinnedImageWindow();
+                    pinnedWindow.SetImage(cropped);
+                    pinnedWindow.Show();
+                }
+                catch { }
+            }
+        }
+
         private void Window_KeyDown(object sender, KeyEventArgs e)
         {
             if (e.Key == Key.Escape)
             {
                 CancelCapture();
+                e.Handled = true;
+            }
+            else if (e.Key == Key.T && Toolbar.Visibility == Visibility.Visible)
+            {
+                PinBtn_Click(this, new RoutedEventArgs());
                 e.Handled = true;
             }
             else if (e.Key == Key.C && MagnifierUI.Visibility == Visibility.Visible)
