@@ -937,7 +937,10 @@ namespace PathSnip
 
                     var pinnedWindow = new PinnedImageWindow();
                     pinnedWindow.SetImage(cropped);
+                    pinnedWindow.SetBounds(rect.Left, rect.Top, rect.Width, rect.Height);
                     pinnedWindow.Show();
+
+                    CancelCapture();
                 }
                 catch (Exception ex)
                 {

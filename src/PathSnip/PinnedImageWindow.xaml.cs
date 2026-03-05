@@ -54,6 +54,16 @@ namespace PathSnip
             Top = screenCenter.Y;
         }
 
+        public void SetBounds(double left, double top, double width, double height)
+        {
+            if (width <= 0 || height <= 0) return;
+
+            Width = width;
+            Height = height;
+            Left = left;
+            Top = top;
+        }
+
         private void Window_MouseLeftButtonDown(object sender, MouseButtonEventArgs e)
         {
             if (e.ClickCount == 1)
