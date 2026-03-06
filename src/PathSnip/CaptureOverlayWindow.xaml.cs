@@ -969,8 +969,21 @@ namespace PathSnip
                 PinBtn_Click(this, new RoutedEventArgs());
                 e.Handled = true;
             }
-            else if (e.Key == Key.C && MagnifierUI.Visibility == Visibility.Visible)
+            else
             {
+                bool isColorCopyKey = e.Key == Key.C ||
+                    (e.Key == Key.ImeProcessed && e.ImeProcessedKey == Key.C);
+
+                if (!isColorCopyKey || MagnifierUI.Visibility != Visibility.Visible)
+                {
+                    return;
+                }
+
+                if (Keyboard.FocusedElement is TextBoxBase)
+                {
+                    return;
+                }
+
                 if (!string.IsNullOrEmpty(_currentColorHex))
                 {
                     string hexWithPrefix = "#" + _currentColorHex;
