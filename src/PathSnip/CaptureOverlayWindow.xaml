@@ -444,20 +444,24 @@
                 <StackPanel>
                     <!-- 颜色选择 -->
                     <StackPanel Orientation="Horizontal" Margin="0,0,0,6" HorizontalAlignment="Center">
-                        <RadioButton x:Name="ColorYellow" GroupName="Color" Style="{StaticResource ColorRadioStyle}" 
-                                     Background="#FFEB3B" Tag="#FFEB3B" Checked="ColorBtn_Click" ToolTip="黄色" />
-                        <RadioButton x:Name="ColorGreen" GroupName="Color" Style="{StaticResource ColorRadioStyle}" 
-                                     Background="#A3E635" Tag="#A3E635" Checked="ColorBtn_Click" ToolTip="绿色" />
-                        <RadioButton x:Name="ColorCyan" GroupName="Color" Style="{StaticResource ColorRadioStyle}" 
-                                     Background="#22D3EE" Tag="#22D3EE" Checked="ColorBtn_Click" ToolTip="青色" />
-                        <RadioButton x:Name="ColorPink" GroupName="Color" Style="{StaticResource ColorRadioStyle}" 
-                                     Background="#F472B6" Tag="#F472B6" Checked="ColorBtn_Click" ToolTip="粉色" />
-                        <RadioButton x:Name="ColorBlue" GroupName="Color" Style="{StaticResource ColorRadioStyle}" 
-                                     Background="#0078D4" Tag="#0078D4" Checked="ColorBtn_Click" ToolTip="蓝色" />
-                        <RadioButton x:Name="ColorRed" GroupName="Color" Style="{StaticResource ColorRadioStyle}" 
-                                     Background="#DC3545" Tag="#DC3545" Checked="ColorBtn_Click" ToolTip="红色" />
-                        <RadioButton x:Name="ColorBlack" GroupName="Color" Style="{StaticResource ColorRadioStyle}" 
-                                     Background="#333333" Tag="#333333" Checked="ColorBtn_Click" ToolTip="黑色" />
+                        <StackPanel x:Name="HighlighterColorGroup" Orientation="Horizontal" Visibility="Collapsed">
+                            <RadioButton x:Name="ColorYellow" GroupName="Color" Style="{StaticResource ColorRadioStyle}" 
+                                         Background="#FFEB3B" Tag="#FFEB3B" Checked="ColorBtn_Click" ToolTip="黄色" />
+                            <RadioButton x:Name="ColorGreen" GroupName="Color" Style="{StaticResource ColorRadioStyle}" 
+                                         Background="#A3E635" Tag="#A3E635" Checked="ColorBtn_Click" ToolTip="绿色" />
+                            <RadioButton x:Name="ColorCyan" GroupName="Color" Style="{StaticResource ColorRadioStyle}" 
+                                         Background="#22D3EE" Tag="#22D3EE" Checked="ColorBtn_Click" ToolTip="青色" />
+                            <RadioButton x:Name="ColorPink" GroupName="Color" Style="{StaticResource ColorRadioStyle}" 
+                                         Background="#F472B6" Tag="#F472B6" Checked="ColorBtn_Click" ToolTip="粉色" />
+                        </StackPanel>
+                        <StackPanel x:Name="AnnotationColorGroup" Orientation="Horizontal">
+                            <RadioButton x:Name="ColorBlue" GroupName="Color" Style="{StaticResource ColorRadioStyle}" 
+                                         Background="#0078D4" Tag="#0078D4" Checked="ColorBtn_Click" ToolTip="蓝色" />
+                            <RadioButton x:Name="ColorRed" GroupName="Color" Style="{StaticResource ColorRadioStyle}" 
+                                         Background="#DC3545" Tag="#DC3545" Checked="ColorBtn_Click" ToolTip="红色" />
+                            <RadioButton x:Name="ColorBlack" GroupName="Color" Style="{StaticResource ColorRadioStyle}" 
+                                         Background="#333333" Tag="#333333" Checked="ColorBtn_Click" ToolTip="黑色" />
+                        </StackPanel>
                     </StackPanel>
                     <!-- 粗细选择 -->
                     <StackPanel Orientation="Horizontal" HorizontalAlignment="Center">

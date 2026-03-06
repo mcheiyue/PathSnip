@@ -47,6 +47,8 @@ namespace PathSnip
 
     public partial class CaptureOverlayWindow : Window
     {
+        private const byte HighlighterAlpha = 76;
+
         private Point _startPoint;
         private bool _isSelecting;
         private bool _hasStartedSelection;  // 是否开始过选区（用于右键判断）
@@ -882,7 +884,7 @@ namespace PathSnip
                     thickness = GetThicknessValue(_arrowThickness);
                     break;
                 case AnnotationTool.Highlighter:
-                    thickness = GetThicknessValue(_highlighterThickness) * 2;
+                    thickness = GetHighlighterThicknessValue(_highlighterThickness);
                     break;
                 case AnnotationTool.Mosaic:
                     thickness = GetMosaicBlockSize();
@@ -927,7 +929,7 @@ namespace PathSnip
                     thickness = GetThicknessValue(_arrowThickness);
                     break;
                 case AnnotationTool.Highlighter:
-                    thickness = GetThicknessValue(_highlighterThickness) * 2;
+                    thickness = GetHighlighterThicknessValue(_highlighterThickness);
                     break;
                 case AnnotationTool.Mosaic:
                     thickness = GetMosaicBlockSize();
@@ -979,7 +981,50 @@ namespace PathSnip
         private Color GetHighlighterColorFromEnum(AnnotationColor colorEnum)
         {
             var baseColor = GetColorFromEnum(colorEnum);
-            return Color.FromArgb(102, baseColor.R, baseColor.G, baseColor.B);
+            return Color.FromArgb(HighlighterAlpha, baseColor.R, baseColor.G, baseColor.B);
+        }
+
+        private double GetHighlighterThicknessValue(AnnotationThickness thicknessEnum)
+        {
+            switch (thicknessEnum)
+            {
+                case AnnotationThickness.Thin:
+                    return 8;
+                case AnnotationThickness.Medium:
+                    return 12;
+                case AnnotationThickness.Thick:
+                    return 16;
+                default:
+                    return 12;
+            }
+        }
+
+        private static bool IsHighlighterPaletteColor(AnnotationColor color)
+        {
+            return color == AnnotationColor.Yellow
+                || color == AnnotationColor.Green
+                || color == AnnotationColor.Cyan
+                || color == AnnotationColor.Pink;
+        }
+
+        private static bool IsAnnotationPaletteColor(AnnotationColor color)
+        {
+            return color == AnnotationColor.Blue
+                || color == AnnotationColor.Red
+                || color == AnnotationColor.Black;
+        }
+
+        private void UpdateColorPaletteVisibility()
+        {
+            if (_currentTool == AnnotationTool.Highlighter)
+            {
+                HighlighterColorGroup.Visibility = Visibility.Visible;
+                AnnotationColorGroup.Visibility = Visibility.Collapsed;
+                return;
+            }
+
+            HighlighterColorGroup.Visibility = Visibility.Collapsed;
+            AnnotationColorGroup.Visibility = Visibility.Visible;
         }
 
         /// <summary>
@@ -1449,13 +1494,24 @@ namespace PathSnip
 
                 // 保存到当前工具的属性
                 if (_currentTool == AnnotationTool.Rectangle)
+                {
+                    if (!IsAnnotationPaletteColor(color)) return;
                     _rectColor = color;
+                }
                 else if (_currentTool == AnnotationTool.Arrow)
+                {
+                    if (!IsAnnotationPaletteColor(color)) return;
                     _arrowColor = color;
+                }
                 else if (_currentTool == AnnotationTool.Highlighter)
+                {
+                    if (!IsHighlighterPaletteColor(color)) return;
                     _highlighterColor = color;
+                }
                 else
+                {
                     return;
+                }
 
                 // 立即更新UI
                 UpdatePropertyPanelUI();
@@ -1510,6 +1566,8 @@ namespace PathSnip
                 colorPanel.Children[0].Visibility = Visibility.Visible; // 颜色
                 colorPanel.Children[1].Visibility = Visibility.Visible; // 粗细
             }
+
+            UpdateColorPaletteVisibility();
 
             // 2. 更新UI
             UpdatePropertyPanelUI();
@@ -1631,6 +1689,8 @@ namespace PathSnip
             ColorBlue.IsChecked = color == AnnotationColor.Blue;
             ColorRed.IsChecked = color == AnnotationColor.Red;
             ColorBlack.IsChecked = color == AnnotationColor.Black;
+
+            UpdateColorPaletteVisibility();
 
             // 更新粗细选中状态
             ThicknessThin.IsChecked = thickness == AnnotationThickness.Thin;

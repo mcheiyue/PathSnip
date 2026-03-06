@@ -10,8 +10,8 @@ namespace PathSnip.Tools
         public AnnotationType Type => AnnotationType.Highlighter;
         public bool IsStrokeBased => true;
 
-        private const double MinPointDistance = 2.5;
-        private const uint MinSampleIntervalMs = 16;
+        private const double MinPointDistance = 1.8;
+        private const uint MinSampleIntervalMs = 12;
 
         private AnnotationToolContext _context;
         private Polyline _currentPolyline;
@@ -42,9 +42,9 @@ namespace PathSnip.Tools
             {
                 Stroke = _context.CurrentColorBrush,
                 StrokeThickness = Math.Max(1, _context.CurrentThickness),
-                StrokeLineJoin = PenLineJoin.Round,
-                StrokeStartLineCap = PenLineCap.Round,
-                StrokeEndLineCap = PenLineCap.Round,
+                StrokeLineJoin = PenLineJoin.Bevel,
+                StrokeStartLineCap = PenLineCap.Square,
+                StrokeEndLineCap = PenLineCap.Square,
                 IsHitTestVisible = false
             };
 
