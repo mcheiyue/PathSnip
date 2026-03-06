@@ -14,6 +14,7 @@ namespace PathSnip.Tools
         Arrow,
         Text,
         Mosaic,
+        Highlighter,
         StepMarker
     }
 

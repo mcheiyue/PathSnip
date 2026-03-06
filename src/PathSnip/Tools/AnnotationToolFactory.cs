@@ -19,6 +19,8 @@ namespace PathSnip.Tools
                     return new TextTool();
                 case AnnotationType.Mosaic:
                     return new MosaicTool();
+                case AnnotationType.Highlighter:
+                    return new HighlighterTool();
                 case AnnotationType.StepMarker:
                     return new StepMarkerTool();
                 default:
