@@ -7,6 +7,10 @@ namespace PathSnip.Services
 {
     public static class FileService
     {
+        private const int MaxCreateAttempts = 20;
+        private const int ErrorCodeFileExists = 80;
+        private const int ErrorCodeAlreadyExists = 183;
+
         public static string Save(BitmapSource bitmap, string operationId = null)
         {
             if (string.IsNullOrWhiteSpace(operationId))
@@ -20,28 +24,10 @@ namespace PathSnip.Services
 
             try
             {
-                // 确保目录存在
                 Directory.CreateDirectory(directory);
 
-                // 使用模板生成文件名
-                string fileName = GenerateFileName(config.FileNameTemplate) + ".png";
-                string fullPath = Path.Combine(directory, fileName);
-
-                // 处理文件名冲突
-                int counter = 1;
-                while (File.Exists(fullPath))
-                {
-                    fileName = $"{GenerateFileName(config.FileNameTemplate)}_{counter}.png";
-                    fullPath = Path.Combine(directory, fileName);
-                    counter++;
-                }
-
-                using (var fileStream = new FileStream(fullPath, FileMode.Create))
-                {
-                    var encoder = new PngBitmapEncoder();
-                    encoder.Frames.Add(BitmapFrame.Create(bitmap));
-                    encoder.Save(fileStream);
-                }
+                string baseName = GenerateFileName(config.FileNameTemplate);
+                string fullPath = SaveWithCreateNewRetry(bitmap, directory, baseName, operationId);
 
                 stopwatch.Stop();
                 LogService.LogInfo("file.save.completed", $"elapsedMs={stopwatch.ElapsedMilliseconds} pixel={bitmap?.PixelWidth ?? 0}x{bitmap?.PixelHeight ?? 0} pathLength={fullPath.Length}", operationId, "file.save");
@@ -80,6 +66,46 @@ namespace PathSnip.Services
             }
 
             return result;
+        }
+
+        private static string SaveWithCreateNewRetry(BitmapSource bitmap, string directory, string baseName, string operationId)
+        {
+            for (int attempt = 0; attempt < MaxCreateAttempts; attempt++)
+            {
+                string suffix = attempt == 0 ? string.Empty : $"_{attempt}";
+                string fileName = $"{baseName}{suffix}.png";
+                string fullPath = Path.Combine(directory, fileName);
+
+                try
+                {
+                    using (var fileStream = new FileStream(fullPath, FileMode.CreateNew, FileAccess.Write, FileShare.None))
+                    {
+                        var encoder = new PngBitmapEncoder();
+                        encoder.Frames.Add(BitmapFrame.Create(bitmap));
+                        encoder.Save(fileStream);
+                    }
+
+                    if (attempt > 0)
+                    {
+                        LogService.LogInfo("file.save.collision_resolved", $"attempt={attempt + 1} maxAttempts={MaxCreateAttempts} fileName={fileName}", operationId, "file.save");
+                    }
+
+                    return fullPath;
+                }
+                catch (IOException ex) when (IsFileAlreadyExistsException(ex))
+                {
+                    LogService.LogWarn("file.save.collision_retry", $"attempt={attempt + 1} maxAttempts={MaxCreateAttempts} fileName={fileName} hresult=0x{ex.HResult:X8}", operationId, "file.save");
+                }
+            }
+
+            LogService.LogWarn("file.save.create_new_exhausted", $"maxAttempts={MaxCreateAttempts} baseName={baseName}", operationId, "file.save");
+            throw new IOException($"Unable to create unique file name after {MaxCreateAttempts} attempts.");
+        }
+
+        private static bool IsFileAlreadyExistsException(IOException ex)
+        {
+            int errorCode = ex.HResult & 0xFFFF;
+            return errorCode == ErrorCodeFileExists || errorCode == ErrorCodeAlreadyExists;
         }
     }
 }
