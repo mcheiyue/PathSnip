@@ -10,9 +10,11 @@ namespace PathSnip
 {
     public partial class MainWindow : Window
     {
+        private const int CaptureDebounceWindowMs = 300;
         private CaptureOverlayWindow _captureWindow;
         private HotkeyService _hotkeyService;
         private bool _isCapturing;
+        private int _lastCaptureRequestTick = -1;
 
         public MainWindow()
         {
@@ -21,8 +23,24 @@ namespace PathSnip
 
         public void StartCapture()
         {
-            // 防止重复触发
-            if (_isCapturing) return;
+            int nowTick = Environment.TickCount;
+            if (_lastCaptureRequestTick >= 0)
+            {
+                uint elapsedMs = unchecked((uint)(nowTick - _lastCaptureRequestTick));
+                if (elapsedMs < CaptureDebounceWindowMs)
+                {
+                    LogService.LogInfo("capture.start.debounced", $"elapsedMs={elapsedMs} windowMs={CaptureDebounceWindowMs}", stage: "capture.start");
+                    return;
+                }
+            }
+
+            if (_isCapturing)
+            {
+                LogService.LogInfo("capture.start.ignored_busy", "capture is already in progress", stage: "capture.start");
+                return;
+            }
+
+            _lastCaptureRequestTick = nowTick;
             _isCapturing = true;
 
             try
@@ -52,6 +70,7 @@ namespace PathSnip
                         _captureWindow.CaptureCompleted += OnCaptureCompleted;
                         _captureWindow.CaptureCompletedWithImage += OnCaptureCompletedWithImage;
                         _captureWindow.CaptureCancelled += OnCaptureCancelled;
+                        _captureWindow.Closed += OnCaptureWindowClosed;
                         _captureWindow.Show();
                     }
                     catch (Exception ex)
@@ -187,9 +206,9 @@ namespace PathSnip
             {
                 _ = Dispatcher.BeginInvoke(new Action(() =>
                 {
+                    _isCapturing = false;  // 重置状态
                     _captureWindow?.Close();
                     _captureWindow = null;
-                    _isCapturing = false;  // 重置状态
                     // 不恢复主窗口，保持托盘隐藏
                 }));
             }
@@ -240,9 +259,9 @@ namespace PathSnip
                 stopwatch.Stop();
                 _ = Dispatcher.BeginInvoke(new Action(() =>
                 {
+                    _isCapturing = false;  // 重置状态
                     _captureWindow?.Close();
                     _captureWindow = null;
-                    _isCapturing = false;  // 重置状态
                     // 不恢复主窗口，保持托盘隐藏
                 }));
             }
@@ -374,12 +393,23 @@ namespace PathSnip
         {
             _ = Dispatcher.BeginInvoke(new Action(() =>
             {
+                _isCapturing = false;  // 重置状态
                 _captureWindow?.Close();
                 _captureWindow = null;
-                _isCapturing = false;  // 重置状态
                 // 不恢复主窗口，保持托盘隐藏
                 LogService.LogInfo("capture.cancelled", "截图已取消", stage: "capture.cancel");
             }));
+        }
+
+        private void OnCaptureWindowClosed(object sender, EventArgs e)
+        {
+            if (_isCapturing)
+            {
+                _isCapturing = false;
+                LogService.LogWarn("capture.state.reset_by_overlay_closed", "overlay closed before completion callback", stage: "capture.state");
+            }
+
+            _captureWindow = null;
         }
 
         private void MenuItem_Capture_Click(object sender, RoutedEventArgs e)
