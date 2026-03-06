@@ -10,7 +10,8 @@
         WindowState="Maximized"
         Cursor="Cross"
         Focusable="True"
-        KeyDown="Window_KeyDown">
+        PreviewKeyDown="Window_KeyDown"
+        PreviewTextInput="Window_PreviewTextInput">
     
     <Window.Resources>
         <!-- 工具单选按钮样式 -->

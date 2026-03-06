@@ -144,7 +144,7 @@ namespace PathSnip
             StartCapture();
         }
 
-        private async void OnCaptureCompleted(Rect region)
+        private void OnCaptureCompleted(Rect region)
         {
             string operationId = LogService.CreateOperationId("cap");
             var stopwatch = Stopwatch.StartNew();
@@ -166,49 +166,16 @@ namespace PathSnip
                 LogService.LogInfo("capture.file.saved", $"pathLength={filePath?.Length ?? 0}", operationId, "file.save");
 
                 var config = ConfigService.Instance;
-                string notifyMsg = "已保存";
-                
-                switch (config.ClipboardMode)
-                {
-                    case ClipboardMode.ImageOnly:
-                        if (!await ClipboardService.TrySetImageAsync(bitmap, operationId))
-                        {
-                            LogService.LogWarn("capture.clipboard.failed", "复制图片失败", operationId, "clipboard.image");
-                            notifyMsg = "已保存，但复制图片失败";
-                            break;
-                        }
-                        notifyMsg = "已保存并复制图片";
-                        break;
-                    case ClipboardMode.ImageAndPath:
-                        var formattedPathForImageAndPath = ClipboardService.FormatPath(filePath, config.PathFormat);
-                        if (!await ClipboardService.TrySetImageAndPathAsync(bitmap, formattedPathForImageAndPath, operationId))
-                        {
-                            LogService.LogWarn("capture.clipboard.failed", "复制图片和路径失败", operationId, "clipboard.image_path");
-                            notifyMsg = "已保存，但复制图片和路径失败";
-                            break;
-                        }
-                        notifyMsg = "已保存并复制图片和路径";
-                        break;
-                    default:
-                        var formattedPath = ClipboardService.FormatPath(filePath, config.PathFormat);
-                        if (!await ClipboardService.TrySetTextAsync(formattedPath, operationId))
-                        {
-                            LogService.LogWarn("capture.clipboard.failed", "复制路径失败", operationId, "clipboard.path");
-                            notifyMsg = "已保存，但复制路径失败";
-                            break;
-                        }
-                        notifyMsg = "已保存并复制路径";
-                        break;
-                }
+                StartClipboardWriteAfterSave(bitmap, filePath, config.ClipboardMode, config.PathFormat, config.ShowNotification, operationId, isCompositeCapture: false);
 
                 // 根据配置决定是否显示通知
                 if (config.ShowNotification)
                 {
-                    TrayIcon.ShowBalloonTip("PathSnip", notifyMsg, Hardcodet.Wpf.TaskbarNotification.BalloonIcon.Info);
+                    TrayIcon.ShowBalloonTip("PathSnip", "已保存", Hardcodet.Wpf.TaskbarNotification.BalloonIcon.Info);
                 }
 
                 stopwatch.Stop();
-                LogService.LogInfo("capture.region.completed", $"elapsedMs={stopwatch.ElapsedMilliseconds} notify={notifyMsg}", operationId, "capture.done");
+                LogService.LogInfo("capture.region.completed", $"elapsedMs={stopwatch.ElapsedMilliseconds}", operationId, "capture.done");
             }
             catch (Exception ex)
             {
@@ -228,9 +195,13 @@ namespace PathSnip
             }
         }
 
-        private async void OnCaptureCompletedWithImage(System.Windows.Media.Imaging.BitmapSource bitmap)
+        private void OnCaptureCompletedWithImage(System.Windows.Media.Imaging.BitmapSource bitmap, string operationId)
         {
-            string operationId = LogService.CreateOperationId("save");
+            if (string.IsNullOrWhiteSpace(operationId))
+            {
+                operationId = LogService.CreateOperationId("save");
+            }
+
             var stopwatch = Stopwatch.StartNew();
             string filePath = null;
             try
@@ -240,69 +211,20 @@ namespace PathSnip
                 LogService.LogInfo("capture.file.saved", $"pathLength={filePath?.Length ?? 0}", operationId, "file.save");
 
                 var config = ConfigService.Instance;
-                string notifyMsg = "已保存";
-                
-                switch (config.ClipboardMode)
-                {
-                    case ClipboardMode.ImageOnly:
-                        if (!await ClipboardService.TrySetImageAsync(bitmap, operationId))
-                        {
-                            LogService.LogWarn("capture.clipboard.failed", "复制图片失败", operationId, "clipboard.image");
-                            notifyMsg = "已保存，但复制图片失败";
-                            break;
-                        }
-                        notifyMsg = "已保存并复制图片";
-                        break;
-                    case ClipboardMode.ImageAndPath:
-                        var formattedPathForImageAndPath = ClipboardService.FormatPath(filePath, config.PathFormat);
-                        if (!await ClipboardService.TrySetImageAndPathAsync(bitmap, formattedPathForImageAndPath, operationId))
-                        {
-                            LogService.LogWarn("capture.clipboard.failed", "复制图片和路径失败", operationId, "clipboard.image_path");
-                            notifyMsg = "已保存，但复制图片和路径失败";
-                            break;
-                        }
-                        notifyMsg = "已保存并复制图片和路径";
-                        break;
-                    default:
-                        var formattedPath = ClipboardService.FormatPath(filePath, config.PathFormat);
-                        if (!await ClipboardService.TrySetTextAsync(formattedPath, operationId))
-                        {
-                            LogService.LogWarn("capture.clipboard.failed", "复制路径失败", operationId, "clipboard.path");
-                            notifyMsg = "已保存，但复制路径失败";
-                            break;
-                        }
-                        notifyMsg = "已保存并复制路径";
-                        break;
-                }
+                StartClipboardWriteAfterSave(bitmap, filePath, config.ClipboardMode, config.PathFormat, config.ShowNotification, operationId, isCompositeCapture: true);
 
                 if (config.ShowNotification)
                 {
-                    TrayIcon.ShowBalloonTip("PathSnip", notifyMsg, Hardcodet.Wpf.TaskbarNotification.BalloonIcon.Info);
+                    TrayIcon.ShowBalloonTip("PathSnip", "已保存", Hardcodet.Wpf.TaskbarNotification.BalloonIcon.Info);
                 }
 
                 stopwatch.Stop();
-                LogService.LogInfo("capture.composite.completed", $"elapsedMs={stopwatch.ElapsedMilliseconds} notify={notifyMsg}", operationId, "capture.done");
+                LogService.LogInfo("capture.composite.completed", $"elapsedMs={stopwatch.ElapsedMilliseconds}", operationId, "capture.done");
             }
             catch (Exception ex)
             {
-                // 保存失败时，仍尝试复制图片
-                if (filePath == null)
-                {
-                    if (await ClipboardService.TrySetImageAsync(bitmap, operationId))
-                    {
-                        LogService.LogWarn("capture.composite.save_failed_clipboard_ok", "保存失败，但图片已复制到剪贴板", operationId, "capture.recovery");
-                        TrayIcon.ShowBalloonTip("PathSnip", "保存失败，图片已复制到剪贴板", Hardcodet.Wpf.TaskbarNotification.BalloonIcon.Warning);
-                    }
-                    else
-                    {
-                        LogService.LogException("capture.composite.save_failed_clipboard_failed", ex, "保存失败，且复制图片到剪贴板失败", operationId, "capture.recovery");
-                    }
-                }
-                else
-                {
-                    LogService.LogException("capture.composite.failed", ex, $"pathLength={filePath.Length}", operationId, "capture.error");
-                    TrayIcon.ShowBalloonTip("PathSnip", $"截图失败: {ex.Message}", Hardcodet.Wpf.TaskbarNotification.BalloonIcon.Error);
-                }
+                LogService.LogException("capture.composite.failed", ex, filePath == null ? "pathLength=0" : $"pathLength={filePath.Length}", operationId, "capture.error");
+                TrayIcon.ShowBalloonTip("PathSnip", $"截图失败: {ex.Message}", Hardcodet.Wpf.TaskbarNotification.BalloonIcon.Error);
             }
             finally
             {
@@ -314,6 +236,80 @@ namespace PathSnip
                     _isCapturing = false;  // 重置状态
                     // 不恢复主窗口，保持托盘隐藏
                 }));
+            }
+        }
+
+        private void StartClipboardWriteAfterSave(
+            System.Windows.Media.Imaging.BitmapSource bitmap,
+            string filePath,
+            ClipboardMode clipboardMode,
+            string pathFormat,
+            bool showNotification,
+            string operationId,
+            bool isCompositeCapture)
+        {
+            _ = WriteClipboardAfterSaveAsync(bitmap, filePath, clipboardMode, pathFormat, showNotification, operationId, isCompositeCapture);
+        }
+
+        private async Task WriteClipboardAfterSaveAsync(
+            System.Windows.Media.Imaging.BitmapSource bitmap,
+            string filePath,
+            ClipboardMode clipboardMode,
+            string pathFormat,
+            bool showNotification,
+            string operationId,
+            bool isCompositeCapture)
+        {
+            var clipboardWatch = Stopwatch.StartNew();
+
+            try
+            {
+                bool copied;
+                string failedMessage;
+                string stage;
+
+                switch (clipboardMode)
+                {
+                    case ClipboardMode.ImageOnly:
+                        copied = await ClipboardService.TrySetImageAsync(bitmap, operationId);
+                        failedMessage = "已保存，但复制图片失败";
+                        stage = "clipboard.image";
+                        break;
+                    case ClipboardMode.ImageAndPath:
+                        var formattedPathForImageAndPath = ClipboardService.FormatPath(filePath, pathFormat);
+                        copied = await ClipboardService.TrySetImageAndPathAsync(bitmap, formattedPathForImageAndPath, operationId);
+                        failedMessage = "已保存，但复制图片和路径失败";
+                        stage = "clipboard.image_path";
+                        break;
+                    default:
+                        var formattedPath = ClipboardService.FormatPath(filePath, pathFormat);
+                        copied = await ClipboardService.TrySetTextAsync(formattedPath, operationId);
+                        failedMessage = "已保存，但复制路径失败";
+                        stage = "clipboard.path";
+                        break;
+                }
+
+                clipboardWatch.Stop();
+                if (copied)
+                {
+                    LogService.LogInfo("capture.clipboard.completed", $"elapsedMs={clipboardWatch.ElapsedMilliseconds}", operationId, stage);
+                    return;
+                }
+
+                LogService.LogWarn("capture.clipboard.failed", $"elapsedMs={clipboardWatch.ElapsedMilliseconds}", operationId, stage);
+                if (showNotification)
+                {
+                    _ = Dispatcher.BeginInvoke(new Action(() =>
+                    {
+                        TrayIcon.ShowBalloonTip("PathSnip", failedMessage, Hardcodet.Wpf.TaskbarNotification.BalloonIcon.Warning);
+                    }));
+                }
+            }
+            catch (Exception ex)
+            {
+                clipboardWatch.Stop();
+                string stage = isCompositeCapture ? "clipboard.composite" : "clipboard.region";
+                LogService.LogException("capture.clipboard.unexpected_error", ex, $"elapsedMs={clipboardWatch.ElapsedMilliseconds}", operationId, stage);
             }
         }
 

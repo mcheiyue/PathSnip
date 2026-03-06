@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Diagnostics;
+using System.Threading.Tasks;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Controls.Primitives;
@@ -8,6 +9,7 @@ using System.Windows.Input;
 using System.Windows.Media;
 using System.Windows.Media.Imaging;
 using System.Windows.Shapes;
+using System.Windows.Threading;
 using PathSnip.Helpers;
 using PathSnip.Services;
 using PathSnip.Tools;
@@ -1025,50 +1027,90 @@ namespace PathSnip
             }
             else
             {
-                bool isColorCopyKey = e.Key == Key.C ||
-                    (e.Key == Key.ImeProcessed && e.ImeProcessedKey == Key.C);
-
-                if (!isColorCopyKey || MagnifierUI.Visibility != Visibility.Visible)
+                if (!IsColorCopyKey(e.Key, e.ImeProcessedKey) || !CanHandleColorCopyShortcut())
                 {
                     return;
                 }
 
-                if (Keyboard.FocusedElement is TextBoxBase)
-                {
-                    return;
-                }
-
-                if (!string.IsNullOrEmpty(_currentColorHex))
-                {
-                    string hexWithPrefix = "#" + _currentColorHex;
-                    string operationId = LogService.CreateOperationId("clip");
-
-                    // 1. 立即更新 UI 给用户反馈，防止底层阻塞导致文字被吞
-                    _isShowingCopyFeedback = true;
-                    ColorHexText.Text = "已复制!";
-                    var timer = new System.Windows.Threading.DispatcherTimer
-                    {
-                        Interval = TimeSpan.FromMilliseconds(800)
-                    };
-                    timer.Tick += (s, args) =>
-                    {
-                        _isShowingCopyFeedback = false;
-                        ColorHexText.Text = "#" + _currentColorHex;
-                        timer.Stop();
-                    };
-                    timer.Start();
-
-                    // 播放系统提示音
-                    System.Media.SystemSounds.Asterisk.Play();
-
-                    bool copied = await ClipboardService.TrySetTextAsync(hexWithPrefix, operationId);
-                    if (!copied)
-                    {
-                        LogService.LogWarn("capture.color_copy.failed", "色值复制失败", operationId, "color.copy");
-                    }
-                }
+                await CopyCurrentColorAsync();
                 e.Handled = true;
             }
+        }
+
+        private async void Window_PreviewTextInput(object sender, TextCompositionEventArgs e)
+        {
+            if (!CanHandleColorCopyShortcut())
+            {
+                return;
+            }
+
+            if (!string.Equals(e.Text, "c", StringComparison.OrdinalIgnoreCase))
+            {
+                return;
+            }
+
+            e.Handled = true;
+            await CopyCurrentColorAsync();
+        }
+
+        private bool CanHandleColorCopyShortcut()
+        {
+            if (MagnifierUI.Visibility != Visibility.Visible)
+            {
+                return false;
+            }
+
+            return !(Keyboard.FocusedElement is TextBoxBase);
+        }
+
+        private static bool IsColorCopyKey(Key key, Key imeProcessedKey)
+        {
+            return key == Key.C ||
+                (key == Key.ImeProcessed && imeProcessedKey == Key.C);
+        }
+
+        private async Task CopyCurrentColorAsync()
+        {
+            if (string.IsNullOrEmpty(_currentColorHex))
+            {
+                return;
+            }
+
+            string hexWithPrefix = "#" + _currentColorHex;
+            string operationId = LogService.CreateOperationId("clip");
+
+            ShowColorCopyFeedback("复制中...");
+            bool copied = await ClipboardService.TrySetTextAsync(hexWithPrefix, operationId);
+
+            if (copied)
+            {
+                System.Media.SystemSounds.Asterisk.Play();
+                ShowColorCopyFeedback("已复制!");
+                return;
+            }
+
+            ShowColorCopyFeedback("复制失败");
+            LogService.LogWarn("capture.color_copy.failed", "色值复制失败", operationId, "color.copy");
+        }
+
+        private void ShowColorCopyFeedback(string text)
+        {
+            _isShowingCopyFeedback = true;
+            ColorHexText.Text = text;
+
+            var timer = new DispatcherTimer
+            {
+                Interval = TimeSpan.FromMilliseconds(800)
+            };
+
+            timer.Tick += (s, args) =>
+            {
+                _isShowingCopyFeedback = false;
+                ColorHexText.Text = "#" + _currentColorHex;
+                timer.Stop();
+            };
+
+            timer.Start();
         }
 
         private void CancelCapture()
@@ -1203,7 +1245,7 @@ namespace PathSnip
                     composeWatch.Stop();
                     LogService.LogInfo("capture.save.compose_completed", $"elapsedMs={composeWatch.ElapsedMilliseconds} size={physicalWidth}x{physicalHeight}", operationId, "compose.done");
 
-                    CaptureCompletedWithImage?.Invoke(renderBitmap);
+                    CaptureCompletedWithImage?.Invoke(renderBitmap, operationId);
                     return;
                 }
 
@@ -1226,7 +1268,7 @@ namespace PathSnip
             }
         }
 
-        public event Action<BitmapSource> CaptureCompletedWithImage;
+        public event Action<BitmapSource, string> CaptureCompletedWithImage;
 
         #region 颜色和粗细
 

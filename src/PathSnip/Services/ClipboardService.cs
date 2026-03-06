@@ -25,7 +25,9 @@ namespace PathSnip.Services
             public string ActionName { get; }
         }
 
-        private static readonly int[] RetryDelaysMs = { 50, 120, 250 };
+        private const int ClipboardCantOpenHResult = unchecked((int)0x800401D0);
+        private static readonly int[] FastRetryDelaysMs = { 50, 120, 250 };
+        private static readonly int[] SlowCantOpenRetryDelaysMs = { 1000, 2000, 5000 };
         private const int ClipboardQueueCapacity = 512;
 
         private static readonly BlockingCollection<ClipboardWorkItem> ClipboardQueue =
@@ -125,86 +127,115 @@ namespace PathSnip.Services
 
         private static void SetText(string text, string operationId)
         {
-            for (int i = 0; i < RetryDelaysMs.Length; i++)
-            {
-                try
+            ExecuteClipboardWrite(
+                operationId,
+                "clipboard.set_text.success",
+                $"textLength={text?.Length ?? 0}",
+                "clipboard.set_text.retry",
+                "clipboard.set_text.failed",
+                () =>
                 {
                     var dataObject = new DataObject();
                     dataObject.SetData(DataFormats.Text, text);
                     Clipboard.SetDataObject(dataObject, true);
-                    LogService.LogInfo("clipboard.set_text.success", $"textLength={text?.Length ?? 0}", operationId, "clipboard.write");
-                    return;
-                }
-                catch (Exception ex)
-                {
-                    if (i == RetryDelaysMs.Length - 1)
-                    {
-                        LogService.LogException("clipboard.set_text.failed", ex, "复制文本到剪贴板失败", operationId, "clipboard.write");
-                        throw;
-                    }
-
-                    int delay = RetryDelaysMs[i];
-                    LogService.LogWarn("clipboard.set_text.retry", $"attempt={i + 1} delayMs={delay}", operationId, "clipboard.retry");
-                    Thread.Sleep(delay);
-                }
-            }
+                });
         }
 
         private static void SetImage(BitmapSource bitmap, string operationId)
         {
-            for (int i = 0; i < RetryDelaysMs.Length; i++)
-            {
-                try
+            ExecuteClipboardWrite(
+                operationId,
+                "clipboard.set_image.success",
+                $"pixel={bitmap?.PixelWidth ?? 0}x{bitmap?.PixelHeight ?? 0}",
+                "clipboard.set_image.retry",
+                "clipboard.set_image.failed",
+                () =>
                 {
                     var dataObject = new DataObject();
                     dataObject.SetData(DataFormats.Bitmap, bitmap);
                     Clipboard.SetDataObject(dataObject, true);
-                    LogService.LogInfo("clipboard.set_image.success", $"pixel={bitmap?.PixelWidth ?? 0}x{bitmap?.PixelHeight ?? 0}", operationId, "clipboard.write");
-                    return;
-                }
-                catch (Exception ex)
-                {
-                    if (i == RetryDelaysMs.Length - 1)
-                    {
-                        LogService.LogException("clipboard.set_image.failed", ex, "复制图片到剪贴板失败", operationId, "clipboard.write");
-                        throw;
-                    }
-
-                    int delay = RetryDelaysMs[i];
-                    LogService.LogWarn("clipboard.set_image.retry", $"attempt={i + 1} delayMs={delay}", operationId, "clipboard.retry");
-                    Thread.Sleep(delay);
-                }
-            }
+                });
         }
 
         private static void SetImageAndPath(BitmapSource bitmap, string path, string operationId)
         {
-            for (int i = 0; i < RetryDelaysMs.Length; i++)
-            {
-                try
+            ExecuteClipboardWrite(
+                operationId,
+                "clipboard.set_image_path.success",
+                $"pixel={bitmap?.PixelWidth ?? 0}x{bitmap?.PixelHeight ?? 0} pathLength={path?.Length ?? 0}",
+                "clipboard.set_image_path.retry",
+                "clipboard.set_image_path.failed",
+                () =>
                 {
                     var dataObject = new DataObject();
                     dataObject.SetData(DataFormats.Bitmap, bitmap);
                     dataObject.SetData(DataFormats.Text, path);
-
                     Clipboard.SetDataObject(dataObject, true);
+                });
+        }
 
-                    LogService.LogInfo("clipboard.set_image_path.success", $"pixel={bitmap?.PixelWidth ?? 0}x{bitmap?.PixelHeight ?? 0} pathLength={path?.Length ?? 0}", operationId, "clipboard.write");
+        private static void ExecuteClipboardWrite(
+            string operationId,
+            string successEvent,
+            string successMessage,
+            string retryEvent,
+            string failEvent,
+            Action writeAction)
+        {
+            int attempt = 0;
+
+            while (true)
+            {
+                try
+                {
+                    writeAction();
+                    LogService.LogInfo(successEvent, successMessage, operationId, "clipboard.write");
                     return;
                 }
                 catch (Exception ex)
                 {
-                    if (i == RetryDelaysMs.Length - 1)
+                    if (!TryGetRetryDelay(ex, attempt, out int delayMs, out string phase))
                     {
-                        LogService.LogException("clipboard.set_image_path.failed", ex, "复制图片和路径到剪贴板失败", operationId, "clipboard.write");
+                        LogService.LogException(failEvent, ex, $"attempt={attempt + 1}", operationId, "clipboard.write");
                         throw;
                     }
 
-                    int delay = RetryDelaysMs[i];
-                    LogService.LogWarn("clipboard.set_image_path.retry", $"attempt={i + 1} delayMs={delay}", operationId, "clipboard.retry");
-                    Thread.Sleep(delay);
+                    string retryMessage = $"attempt={attempt + 1} delayMs={delayMs} phase={phase} hresult=0x{((uint)ex.HResult):X8} queue={ClipboardQueue.Count}";
+                    LogService.LogWarn(retryEvent, retryMessage, operationId, "clipboard.retry");
+                    Thread.Sleep(delayMs);
+                    attempt++;
                 }
             }
+        }
+
+        private static bool TryGetRetryDelay(Exception ex, int attempt, out int delayMs, out string phase)
+        {
+            if (attempt < FastRetryDelaysMs.Length)
+            {
+                delayMs = FastRetryDelaysMs[attempt];
+                phase = "fast";
+                return true;
+            }
+
+            if (IsClipboardCantOpen(ex))
+            {
+                int slowRetryIndex = attempt - FastRetryDelaysMs.Length;
+                if (slowRetryIndex < SlowCantOpenRetryDelaysMs.Length)
+                {
+                    delayMs = SlowCantOpenRetryDelaysMs[slowRetryIndex];
+                    phase = "slow";
+                    return true;
+                }
+            }
+
+            delayMs = 0;
+            phase = "none";
+            return false;
+        }
+
+        private static bool IsClipboardCantOpen(Exception ex)
+        {
+            return ex.HResult == ClipboardCantOpenHResult;
         }
 
         public static string FormatPath(string path, string format)
