@@ -1043,8 +1043,7 @@ namespace PathSnip
                 CancelCapture();
                 e.Handled = true;
             }
-            else if (e.Key == Key.T && Toolbar.Visibility == Visibility.Visible &&
-                     _currentRect.Width > 0 && _currentRect.Height > 0)
+            else if (IsPinShortcutKey(e.Key, e.ImeProcessedKey) && CanHandlePinShortcut())
             {
                 PinBtn_Click(this, new RoutedEventArgs());
                 e.Handled = true;
@@ -1063,6 +1062,13 @@ namespace PathSnip
 
         private async void Window_PreviewTextInput(object sender, TextCompositionEventArgs e)
         {
+            if (CanHandlePinShortcut() && string.Equals(e.Text, "t", StringComparison.OrdinalIgnoreCase))
+            {
+                e.Handled = true;
+                PinBtn_Click(this, new RoutedEventArgs());
+                return;
+            }
+
             if (!CanHandleColorCopyShortcut())
             {
                 return;
@@ -1075,6 +1081,16 @@ namespace PathSnip
 
             e.Handled = true;
             await CopyCurrentColorAsync();
+        }
+
+        private bool CanHandlePinShortcut()
+        {
+            if (Toolbar.Visibility != Visibility.Visible || _currentRect.Width <= 0 || _currentRect.Height <= 0)
+            {
+                return false;
+            }
+
+            return !(Keyboard.FocusedElement is TextBoxBase);
         }
 
         private bool CanHandleColorCopyShortcut()
@@ -1091,6 +1107,12 @@ namespace PathSnip
         {
             return key == Key.C ||
                 (key == Key.ImeProcessed && imeProcessedKey == Key.C);
+        }
+
+        private static bool IsPinShortcutKey(Key key, Key imeProcessedKey)
+        {
+            return key == Key.T ||
+                (key == Key.ImeProcessed && imeProcessedKey == Key.T);
         }
 
         private async Task CopyCurrentColorAsync()
