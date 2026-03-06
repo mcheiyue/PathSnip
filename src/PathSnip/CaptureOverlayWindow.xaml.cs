@@ -90,7 +90,13 @@ namespace PathSnip
         {
             InitializeComponent();
 
-            Loaded += (s, e) => Focus();
+            Loaded += (s, e) =>
+            {
+                Focus();
+                UpdateImeInterceptionState(Keyboard.FocusedElement);
+            };
+
+            AddHandler(Keyboard.GotKeyboardFocusEvent, new KeyboardFocusChangedEventHandler(OnOverlayGotKeyboardFocus), true);
 
             AnnotationCanvas.Focusable = true;
             SelectionCanvas.Focusable = true;
@@ -123,6 +129,24 @@ namespace PathSnip
             AnnotationCanvas.MouseLeftButtonDown += AnnotationCanvas_MouseLeftButtonDown;
             AnnotationCanvas.MouseMove += AnnotationCanvas_MouseMove;
             AnnotationCanvas.MouseLeftButtonUp += AnnotationCanvas_MouseLeftButtonUp;
+        }
+
+        private void OnOverlayGotKeyboardFocus(object sender, KeyboardFocusChangedEventArgs e)
+        {
+            UpdateImeInterceptionState(e.NewFocus);
+        }
+
+        private void UpdateImeInterceptionState(IInputElement focusedElement)
+        {
+            var focusedObject = focusedElement as DependencyObject;
+            bool shouldEnableIme = focusedObject is TextBoxBase;
+
+            InputMethod.SetIsInputMethodEnabled(this, shouldEnableIme);
+
+            if (shouldEnableIme && focusedObject != null)
+            {
+                InputMethod.SetIsInputMethodEnabled(focusedObject, true);
+            }
         }
 
         private void OnMouseRightButtonDown(object sender, MouseButtonEventArgs e)

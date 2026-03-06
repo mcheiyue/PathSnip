@@ -59,6 +59,7 @@ namespace PathSnip.Tools
             Canvas.SetLeft(_currentTextBox, pos.X);
             Canvas.SetTop(_currentTextBox, pos.Y);
             _context.AnnotationCanvas.Children.Add(_currentTextBox);
+            InputMethod.SetIsInputMethodEnabled(_currentTextBox, true);
 
             _currentTextBox.Focus();
             _currentTextBox.SelectAll();
