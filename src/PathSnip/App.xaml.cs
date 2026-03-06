@@ -1,6 +1,8 @@
 using System;
+using System.Threading.Tasks;
 using System.Windows;
 using System.Windows.Input;
+using System.Windows.Threading;
 using PathSnip.Services;
 
 namespace PathSnip
@@ -13,6 +15,9 @@ namespace PathSnip
         protected override void OnStartup(StartupEventArgs e)
         {
             base.OnStartup(e);
+
+            RegisterGlobalExceptionHandlers();
+            LogService.LogInfo("app.startup", "应用启动", stage: "startup.begin");
 
             // 初始化配置
             ConfigService.Instance.EnsureDirectoryExists();
@@ -37,11 +42,41 @@ namespace PathSnip
             if (!registerSuccess)
             {
                 _mainWindow.ShowTrayNotification($"热键 {config.HotkeyModifiers}+{config.HotkeyKey} 注册失败，可能已被占用，请在设置中更换。", Hardcodet.Wpf.TaskbarNotification.BalloonIcon.Warning);
-                LogService.Log($"PathSnip 启动完成，但热键注册失败 ({config.HotkeyModifiers}+{config.HotkeyKey})");
+                LogService.LogWarn("app.hotkey.register_failed", $"热键注册失败 ({config.HotkeyModifiers}+{config.HotkeyKey})", stage: "startup.hotkey");
                 return;
             }
 
-            LogService.Log($"PathSnip 启动完成，热键已注册 ({config.HotkeyModifiers}+{config.HotkeyKey})");
+            LogService.LogInfo("app.startup.completed", $"热键已注册 ({config.HotkeyModifiers}+{config.HotkeyKey})", stage: "startup.hotkey");
+        }
+
+        private void RegisterGlobalExceptionHandlers()
+        {
+            DispatcherUnhandledException += OnDispatcherUnhandledException;
+            AppDomain.CurrentDomain.UnhandledException += OnCurrentDomainUnhandledException;
+            TaskScheduler.UnobservedTaskException += OnUnobservedTaskException;
+        }
+
+        private void OnDispatcherUnhandledException(object sender, DispatcherUnhandledExceptionEventArgs e)
+        {
+            LogService.LogException("app.dispatcher_unhandled", e.Exception, "UI线程未处理异常", stage: "global-exception");
+            e.Handled = true;
+        }
+
+        private void OnCurrentDomainUnhandledException(object sender, UnhandledExceptionEventArgs e)
+        {
+            if (e.ExceptionObject is Exception ex)
+            {
+                LogService.LogException("app.domain_unhandled", ex, $"进程级未处理异常, terminating={e.IsTerminating}", stage: "global-exception");
+                return;
+            }
+
+            LogService.LogWarn("app.domain_unhandled", $"进程级未处理异常对象不可转换, terminating={e.IsTerminating}", stage: "global-exception");
+        }
+
+        private void OnUnobservedTaskException(object sender, UnobservedTaskExceptionEventArgs e)
+        {
+            LogService.LogException("app.task_unobserved", e.Exception, "未观察到的任务异常", stage: "global-exception");
+            e.SetObserved();
         }
 
         private ModifierKeys ParseModifiers(string modifiersStr)
@@ -80,7 +115,7 @@ namespace PathSnip
                 }
                 catch (Exception ex)
                 {
-                    LogService.Log($"热键触发失败: {ex.Message}");
+                    LogService.LogException("app.hotkey.invoke_failed", ex, "热键触发失败", stage: "hotkey.invoke");
                 }
             }), System.Windows.Threading.DispatcherPriority.Send);
         }
@@ -88,7 +123,7 @@ namespace PathSnip
         protected override void OnExit(ExitEventArgs e)
         {
             _hotkeyService?.Unregister();
-            LogService.Log("PathSnip 已退出");
+            LogService.LogInfo("app.exit", "PathSnip 已退出", stage: "shutdown");
             base.OnExit(e);
         }
     }
