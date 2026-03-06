@@ -1005,7 +1005,7 @@ namespace PathSnip
                 }
                 catch (Exception ex)
                 {
-                    LogService.Log($"贴图失败: {ex.Message}");
+                    LogService.LogException("capture.pin.failed", ex, "贴图失败", stage: "pin");
                 }
             }
         }
@@ -1041,6 +1041,7 @@ namespace PathSnip
                 if (!string.IsNullOrEmpty(_currentColorHex))
                 {
                     string hexWithPrefix = "#" + _currentColorHex;
+                    string operationId = LogService.CreateOperationId("clip");
 
                     // 1. 立即更新 UI 给用户反馈，防止底层阻塞导致文字被吞
                     _isShowingCopyFeedback = true;
@@ -1060,7 +1061,11 @@ namespace PathSnip
                     // 播放系统提示音
                     System.Media.SystemSounds.Asterisk.Play();
 
-                    await ClipboardService.TrySetTextAsync(hexWithPrefix);
+                    bool copied = await ClipboardService.TrySetTextAsync(hexWithPrefix, operationId);
+                    if (!copied)
+                    {
+                        LogService.LogWarn("capture.color_copy.failed", "色值复制失败", operationId, "color.copy");
+                    }
                 }
                 e.Handled = true;
             }
@@ -1083,120 +1088,142 @@ namespace PathSnip
 
         private void SaveBtn_Click(object sender, RoutedEventArgs e)
         {
+            string operationId = LogService.CreateOperationId("save");
+            var composeWatch = Stopwatch.StartNew();
+            LogService.LogInfo("capture.save.start", $"rect=({_currentRect.Left:F2},{_currentRect.Top:F2},{_currentRect.Width:F2},{_currentRect.Height:F2})", operationId, "compose.start");
+
             this.Focus();
 
-            SelectionRect.Visibility = Visibility.Collapsed;
-            SizeLabel.Visibility = Visibility.Collapsed;
-            OuterMask.Visibility = Visibility.Collapsed;
-            Toolbar.Visibility = Visibility.Collapsed;
-            PropertyPopup.IsOpen = false;
-            AnnotationCanvas.Visibility = Visibility.Collapsed;
-            MosaicCanvas.Visibility = Visibility.Collapsed;
-            HideResizeAnchors();
-
-            // 强制渲染，确保UI已经隐藏
-            Dispatcher.Invoke(() => { }, System.Windows.Threading.DispatcherPriority.Render);
-
-            if (BackgroundImage.Source is BitmapSource background)
+            try
             {
-                // 1. 获取当前屏幕 DPI
-                PresentationSource source = PresentationSource.FromVisual(this);
-                double dpiX = 96.0, dpiY = 96.0;
-                if (source?.CompositionTarget != null)
+                SelectionRect.Visibility = Visibility.Collapsed;
+                SizeLabel.Visibility = Visibility.Collapsed;
+                OuterMask.Visibility = Visibility.Collapsed;
+                Toolbar.Visibility = Visibility.Collapsed;
+                PropertyPopup.IsOpen = false;
+                AnnotationCanvas.Visibility = Visibility.Collapsed;
+                MosaicCanvas.Visibility = Visibility.Collapsed;
+                HideResizeAnchors();
+
+                // 强制渲染，确保UI已经隐藏
+                Dispatcher.Invoke(() => { }, System.Windows.Threading.DispatcherPriority.Render);
+
+                if (BackgroundImage.Source is BitmapSource background)
                 {
-                    dpiX = 96.0 * source.CompositionTarget.TransformToDevice.M11;
-                    dpiY = 96.0 * source.CompositionTarget.TransformToDevice.M22;
-                }
-
-                // 2. 关键修复：直接计算【选区】的物理像素尺寸，而不是全屏！
-                var physicalWidth = (int)(_currentRect.Width * dpiX / 96.0);
-                var physicalHeight = (int)(_currentRect.Height * dpiY / 96.0);
-
-                // 3. 创建正好等于【选区尺寸】的画布
-                var renderBitmap = new RenderTargetBitmap(physicalWidth, physicalHeight, dpiX, dpiY, PixelFormats.Pbgra32);
-
-                var drawingVisual = new DrawingVisual();
-                using (var dc = drawingVisual.RenderOpen())
-                {
-                    // 4. 先用 CroppedBitmap 从原全屏背景图中把选区抠出来
-                    // 使用 Math.Min 防止超出原背景图的物理边界
-                    int cropX = (int)(_currentRect.Left * dpiX / 96.0);
-                    int cropY = (int)(_currentRect.Top * dpiY / 96.0);
-                    int cropW = Math.Min(physicalWidth, background.PixelWidth - cropX);
-                    int cropH = Math.Min(physicalHeight, background.PixelHeight - cropY);
-
-                    var bgCropRect = new Int32Rect(cropX, cropY, cropW, cropH);
-                    var croppedBackground = new CroppedBitmap(background, bgCropRect);
-
-                    // 把抠出来的背景图画在 (0,0)，使用物理像素尺寸
-                    dc.DrawImage(croppedBackground, new Rect(0, 0, physicalWidth, physicalHeight));
-
-                    // 5. 绘制马赛克层（底层）
-                    if (MosaicCanvas.Visibility == Visibility.Visible && MosaicCanvas.Children.Count > 0)
+                    // 1. 获取当前屏幕 DPI
+                    PresentationSource source = PresentationSource.FromVisual(this);
+                    double dpiX = 96.0;
+                    double dpiY = 96.0;
+                    if (source?.CompositionTarget != null)
                     {
-                        dc.PushTransform(new TranslateTransform(-_currentRect.Left, -_currentRect.Top));
-
-                        var mosaicBrush = new VisualBrush(MosaicCanvas)
-                        {
-                            Stretch = Stretch.None,
-                            AlignmentX = AlignmentX.Left,
-                            AlignmentY = AlignmentY.Top,
-                            ViewboxUnits = BrushMappingMode.Absolute,
-                            Viewbox = new Rect(0, 0, ActualWidth, ActualHeight),
-                            ViewportUnits = BrushMappingMode.Absolute,
-                            Viewport = new Rect(0, 0, ActualWidth, ActualHeight)
-                        };
-
-                        dc.DrawRectangle(mosaicBrush, null, new Rect(0, 0, ActualWidth, ActualHeight));
-
-                        dc.Pop();
+                        dpiX = 96.0 * source.CompositionTarget.TransformToDevice.M11;
+                        dpiY = 96.0 * source.CompositionTarget.TransformToDevice.M22;
                     }
 
-                    // 6. 绘制标注层（顶层）
-                    if (AnnotationCanvas.Visibility == Visibility.Visible)
+                    if (_currentRect.Width <= 0 || _currentRect.Height <= 0)
                     {
-                        // 将全屏的 AnnotationCanvas 向左上方平移，使其选区部分恰好落入 (0,0)
-                        dc.PushTransform(new TranslateTransform(-_currentRect.Left, -_currentRect.Top));
-
-                        var annotationBrush = new VisualBrush(AnnotationCanvas)
-                        {
-                            Stretch = Stretch.None, // 绝对不拉伸
-                            AlignmentX = AlignmentX.Left,
-                            AlignmentY = AlignmentY.Top,
-
-                            // ================= 【核心修复在这里】 =================
-                            // 必须强制指定绝对视图区！
-                            // 拒绝 VisualBrush 自动裁剪内容边界，强行捕获全屏坐标系，防止产生双倍偏移！
-                            ViewboxUnits = BrushMappingMode.Absolute,
-                            Viewbox = new Rect(0, 0, ActualWidth, ActualHeight),
-                            ViewportUnits = BrushMappingMode.Absolute,
-                            Viewport = new Rect(0, 0, ActualWidth, ActualHeight)
-                            // ======================================================
-                        };
-
-                        // 画笔是全屏大小的，通过上面的平移，它会自动把对应的部分严丝合缝地填入背景之上
-                        dc.DrawRectangle(annotationBrush, null, new Rect(0, 0, ActualWidth, ActualHeight));
-
-                        dc.Pop();
+                        throw new InvalidOperationException("保存失败：选区尺寸无效。");
                     }
+
+                    int physicalWidth = Math.Max(1, (int)Math.Round(_currentRect.Width * dpiX / 96.0));
+                    int physicalHeight = Math.Max(1, (int)Math.Round(_currentRect.Height * dpiY / 96.0));
+
+                    // 3. 创建正好等于【选区尺寸】的画布
+                    var renderBitmap = new RenderTargetBitmap(physicalWidth, physicalHeight, dpiX, dpiY, PixelFormats.Pbgra32);
+
+                    var drawingVisual = new DrawingVisual();
+                    using (var dc = drawingVisual.RenderOpen())
+                    {
+                        // 4. 先用 CroppedBitmap 从原全屏背景图中把选区抠出来
+                        int cropX = (int)Math.Floor(_currentRect.Left * dpiX / 96.0);
+                        int cropY = (int)Math.Floor(_currentRect.Top * dpiY / 96.0);
+
+                        cropX = Math.Max(0, Math.Min(cropX, Math.Max(0, background.PixelWidth - 1)));
+                        cropY = Math.Max(0, Math.Min(cropY, Math.Max(0, background.PixelHeight - 1)));
+
+                        int cropW = Math.Min(physicalWidth, background.PixelWidth - cropX);
+                        int cropH = Math.Min(physicalHeight, background.PixelHeight - cropY);
+
+                        if (cropW <= 0 || cropH <= 0)
+                        {
+                            throw new InvalidOperationException($"保存失败：裁剪区域无效 ({cropX},{cropY},{cropW},{cropH})。background={background.PixelWidth}x{background.PixelHeight}");
+                        }
+
+                        var bgCropRect = new Int32Rect(cropX, cropY, cropW, cropH);
+                        var croppedBackground = new CroppedBitmap(background, bgCropRect);
+
+                        dc.DrawImage(croppedBackground, new Rect(0, 0, physicalWidth, physicalHeight));
+
+                        // 5. 绘制马赛克层（底层）
+                        if (MosaicCanvas.Visibility == Visibility.Visible && MosaicCanvas.Children.Count > 0)
+                        {
+                            dc.PushTransform(new TranslateTransform(-_currentRect.Left, -_currentRect.Top));
+
+                            var mosaicBrush = new VisualBrush(MosaicCanvas)
+                            {
+                                Stretch = Stretch.None,
+                                AlignmentX = AlignmentX.Left,
+                                AlignmentY = AlignmentY.Top,
+                                ViewboxUnits = BrushMappingMode.Absolute,
+                                Viewbox = new Rect(0, 0, ActualWidth, ActualHeight),
+                                ViewportUnits = BrushMappingMode.Absolute,
+                                Viewport = new Rect(0, 0, ActualWidth, ActualHeight)
+                            };
+
+                            dc.DrawRectangle(mosaicBrush, null, new Rect(0, 0, ActualWidth, ActualHeight));
+
+                            dc.Pop();
+                        }
+
+                        // 6. 绘制标注层（顶层）
+                        if (AnnotationCanvas.Visibility == Visibility.Visible)
+                        {
+                            dc.PushTransform(new TranslateTransform(-_currentRect.Left, -_currentRect.Top));
+
+                            var annotationBrush = new VisualBrush(AnnotationCanvas)
+                            {
+                                Stretch = Stretch.None,
+                                AlignmentX = AlignmentX.Left,
+                                AlignmentY = AlignmentY.Top,
+                                ViewboxUnits = BrushMappingMode.Absolute,
+                                Viewbox = new Rect(0, 0, ActualWidth, ActualHeight),
+                                ViewportUnits = BrushMappingMode.Absolute,
+                                Viewport = new Rect(0, 0, ActualWidth, ActualHeight)
+                            };
+
+                            dc.DrawRectangle(annotationBrush, null, new Rect(0, 0, ActualWidth, ActualHeight));
+
+                            dc.Pop();
+                        }
+                    }
+
+                    renderBitmap.Render(drawingVisual);
+                    renderBitmap.Freeze();
+
+                    composeWatch.Stop();
+                    LogService.LogInfo("capture.save.compose_completed", $"elapsedMs={composeWatch.ElapsedMilliseconds} size={physicalWidth}x{physicalHeight}", operationId, "compose.done");
+
+                    CaptureCompletedWithImage?.Invoke(renderBitmap);
+                    return;
                 }
 
-                // 6. 渲染合成
-                renderBitmap.Render(drawingVisual);
+                // 如果没有背景图的回退逻辑
+                var screenRect = new Rect(
+                    _currentRect.Left + Left,
+                    _currentRect.Top + Top,
+                    _currentRect.Width,
+                    _currentRect.Height);
 
-                // 7. 直接输出！不再需要用 CroppedBitmap 二次裁剪了
-                CaptureCompletedWithImage?.Invoke(renderBitmap);
-                return;
+                composeWatch.Stop();
+                LogService.LogWarn("capture.save.background_missing", "背景图为空，回退屏幕区域保存", operationId, "compose.fallback");
+                CaptureCompleted?.Invoke(screenRect);
             }
-
-            // 如果没有背景图的回退逻辑
-            var screenRect = new Rect(
-                _currentRect.Left + Left,
-                _currentRect.Top + Top,
-                _currentRect.Width,
-                _currentRect.Height);
-
-            CaptureCompleted?.Invoke(screenRect);
+            catch (Exception ex)
+            {
+                composeWatch.Stop();
+                LogService.LogException("capture.save.failed", ex, $"保存失败 elapsedMs={composeWatch.ElapsedMilliseconds}", operationId, "compose.error");
+                CaptureCancelled?.Invoke();
+            }
         }
 
         public event Action<BitmapSource> CaptureCompletedWithImage;
