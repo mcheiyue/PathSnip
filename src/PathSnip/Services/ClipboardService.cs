@@ -15,16 +15,45 @@ namespace PathSnip.Services
 
         public static Task<bool> TrySetImageAsync(BitmapSource bitmap)
         {
-            return RunStaClipboardActionAsync(() => SetImage(bitmap));
+            var safeBitmap = CloneFrozenBitmap(bitmap);
+            return RunStaClipboardActionAsync(() => SetImage(safeBitmap));
         }
 
         public static Task<bool> TrySetImageAndPathAsync(BitmapSource bitmap, string path)
         {
-            return RunStaClipboardActionAsync(() => SetImageAndPath(bitmap, path));
+            var safeBitmap = CloneFrozenBitmap(bitmap);
+            return RunStaClipboardActionAsync(() => SetImageAndPath(safeBitmap, path));
+        }
+
+        private static BitmapSource CloneFrozenBitmap(BitmapSource bitmap)
+        {
+            if (bitmap == null)
+                return null;
+
+            if (bitmap.IsFrozen)
+                return bitmap;
+
+            var clone = bitmap.Clone();
+            clone.Freeze();
+            return clone;
         }
 
         private static Task<bool> RunStaClipboardActionAsync(Action action)
         {
+            if (Thread.CurrentThread.GetApartmentState() == ApartmentState.STA)
+            {
+                try
+                {
+                    action();
+                    return Task.FromResult(true);
+                }
+                catch (Exception ex)
+                {
+                    LogService.LogError("异步剪贴板操作失败", ex);
+                    return Task.FromResult(false);
+                }
+            }
+
             var tcs = new TaskCompletionSource<bool>();
 
             var thread = new Thread(() =>
