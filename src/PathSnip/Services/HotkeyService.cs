@@ -48,11 +48,11 @@ namespace PathSnip.Services
 
             if (!_isRegistered)
             {
-                LogService.Log($"热键注册失败: {hotkeyDisplay} 可能已被其他程序占用");
+                LogService.LogWarn("hotkey.register.failed", $"热键注册失败: {hotkeyDisplay} 可能已被其他程序占用", stage: "hotkey.register");
             }
             else
             {
-                LogService.Log($"热键注册成功: {hotkeyDisplay}");
+                LogService.LogInfo("hotkey.register.success", $"热键注册成功: {hotkeyDisplay}", stage: "hotkey.register");
             }
 
             // 存储回调（这里简化处理，实际可以用字典存储多个回调）
@@ -79,7 +79,7 @@ namespace PathSnip.Services
             {
                 UnregisterHotKey(_windowHandle, _hotkeyId);
                 _isRegistered = false;
-                LogService.Log("热键已注销");
+                LogService.LogInfo("hotkey.unregister", "热键已注销", stage: "hotkey.unregister");
             }
         }
 

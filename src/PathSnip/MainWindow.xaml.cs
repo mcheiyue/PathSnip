@@ -44,7 +44,7 @@ namespace PathSnip
                         }
                         catch (Exception ex)
                         {
-                            LogService.Log($"截取背景失败: {ex.Message}");
+                            LogService.LogException("capture.background.failed", ex, "截取背景失败", stage: "capture.background");
                         }
 
                         // 创建并显示框选窗口，传入背景图
@@ -56,14 +56,14 @@ namespace PathSnip
                     }
                     catch (Exception ex)
                     {
-                        LogService.Log($"创建截图窗口失败: {ex.Message}");
+                        LogService.LogException("capture.window_create.failed", ex, "创建截图窗口失败", stage: "capture.window");
                         _isCapturing = false;
                     }
                 }), System.Windows.Threading.DispatcherPriority.Send);
             }
             catch (Exception ex)
             {
-                LogService.Log($"StartCapture失败: {ex.Message}");
+                LogService.LogException("capture.start.failed", ex, "StartCapture失败", stage: "capture.start");
                 _isCapturing = false;
             }
         }
@@ -81,18 +81,18 @@ namespace PathSnip
                 if (!registerSuccess)
                 {
                     TrayIcon.ShowBalloonTip("PathSnip", $"热键 {modifiersStr}+{keyStr} 注册失败，可能已被占用，请在设置中更换。", Hardcodet.Wpf.TaskbarNotification.BalloonIcon.Warning);
-                    LogService.Log($"热键注册失败: {modifiersStr}+{keyStr}");
+                    LogService.LogWarn("hotkey.update.register_failed", $"热键注册失败: {modifiersStr}+{keyStr}", stage: "hotkey.update");
                     return;
                 }
 
                 // 更新菜单显示的快捷键
                 UpdateMenuHotkeyText();
 
-                LogService.Log($"热键已更新: {modifiersStr}+{keyStr}");
+                LogService.LogInfo("hotkey.update.success", $"热键已更新: {modifiersStr}+{keyStr}", stage: "hotkey.update");
             }
             catch (Exception ex)
             {
-                LogService.LogError("更新热键失败", ex);
+                LogService.LogException("hotkey.update.failed", ex, "更新热键失败", stage: "hotkey.update");
             }
         }
 
@@ -223,8 +223,17 @@ namespace PathSnip
             }
             catch (Exception ex)
             {
-                LogService.LogException("capture.composite.failed", ex, filePath == null ? "pathLength=0" : $"pathLength={filePath.Length}", operationId, "capture.error");
-                TrayIcon.ShowBalloonTip("PathSnip", $"截图失败: {ex.Message}", Hardcodet.Wpf.TaskbarNotification.BalloonIcon.Error);
+                if (filePath == null)
+                {
+                    var config = ConfigService.Instance;
+                    LogService.LogException("capture.composite.save_failed", ex, "保存失败，尝试复制图片兜底", operationId, "capture.recovery");
+                    StartClipboardRecoveryAfterSaveFailure(bitmap, config.ShowNotification, operationId);
+                }
+                else
+                {
+                    LogService.LogException("capture.composite.failed", ex, $"pathLength={filePath.Length}", operationId, "capture.error");
+                    TrayIcon.ShowBalloonTip("PathSnip", $"截图失败: {ex.Message}", Hardcodet.Wpf.TaskbarNotification.BalloonIcon.Error);
+                }
             }
             finally
             {
@@ -310,6 +319,54 @@ namespace PathSnip
                 clipboardWatch.Stop();
                 string stage = isCompositeCapture ? "clipboard.composite" : "clipboard.region";
                 LogService.LogException("capture.clipboard.unexpected_error", ex, $"elapsedMs={clipboardWatch.ElapsedMilliseconds}", operationId, stage);
+            }
+        }
+
+        private void StartClipboardRecoveryAfterSaveFailure(
+            System.Windows.Media.Imaging.BitmapSource bitmap,
+            bool showNotification,
+            string operationId)
+        {
+            _ = WriteClipboardRecoveryImageAsync(bitmap, showNotification, operationId);
+        }
+
+        private async Task WriteClipboardRecoveryImageAsync(
+            System.Windows.Media.Imaging.BitmapSource bitmap,
+            bool showNotification,
+            string operationId)
+        {
+            var recoveryWatch = Stopwatch.StartNew();
+            try
+            {
+                bool copied = await ClipboardService.TrySetImageAsync(bitmap, operationId);
+                recoveryWatch.Stop();
+
+                if (copied)
+                {
+                    LogService.LogWarn("capture.recovery.clipboard_image_copied", $"elapsedMs={recoveryWatch.ElapsedMilliseconds}", operationId, "capture.recovery");
+                    if (showNotification)
+                    {
+                        _ = Dispatcher.BeginInvoke(new Action(() =>
+                        {
+                            TrayIcon.ShowBalloonTip("PathSnip", "保存失败，图片已复制到剪贴板", Hardcodet.Wpf.TaskbarNotification.BalloonIcon.Warning);
+                        }));
+                    }
+                    return;
+                }
+
+                LogService.LogWarn("capture.recovery.clipboard_image_failed", $"elapsedMs={recoveryWatch.ElapsedMilliseconds}", operationId, "capture.recovery");
+                if (showNotification)
+                {
+                    _ = Dispatcher.BeginInvoke(new Action(() =>
+                    {
+                        TrayIcon.ShowBalloonTip("PathSnip", "保存失败，且复制图片失败", Hardcodet.Wpf.TaskbarNotification.BalloonIcon.Error);
+                    }));
+                }
+            }
+            catch (Exception ex)
+            {
+                recoveryWatch.Stop();
+                LogService.LogException("capture.recovery.clipboard_image_error", ex, $"elapsedMs={recoveryWatch.ElapsedMilliseconds}", operationId, "capture.recovery");
             }
         }
 

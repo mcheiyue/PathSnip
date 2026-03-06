@@ -1,4 +1,5 @@
 using System;
+using System.Runtime.InteropServices;
 using System.Threading.Tasks;
 using System.Windows;
 using System.Windows.Input;
@@ -9,6 +10,8 @@ namespace PathSnip
 {
     public partial class App : Application
     {
+        private const int ClipboardCantOpenHResult = unchecked((int)0x800401D0);
+
         private MainWindow _mainWindow;
         private HotkeyService _hotkeyService;
 
@@ -59,7 +62,15 @@ namespace PathSnip
         private void OnDispatcherUnhandledException(object sender, DispatcherUnhandledExceptionEventArgs e)
         {
             LogService.LogException("app.dispatcher_unhandled", e.Exception, "UI线程未处理异常", stage: "global-exception");
-            e.Handled = true;
+
+            if (e.Exception is ExternalException external && external.HResult == ClipboardCantOpenHResult)
+            {
+                LogService.LogWarn("app.dispatcher_unhandled.clipboard_busy", "检测到剪贴板占用异常，按非致命处理", stage: "global-exception");
+                e.Handled = true;
+                return;
+            }
+
+            e.Handled = false;
         }
 
         private void OnCurrentDomainUnhandledException(object sender, UnhandledExceptionEventArgs e)
