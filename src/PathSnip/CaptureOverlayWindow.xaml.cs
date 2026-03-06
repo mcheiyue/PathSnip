@@ -23,11 +23,16 @@ namespace PathSnip
         Arrow,
         Text,
         Mosaic,
+        Highlighter,
         Step
     }
 
     public enum AnnotationColor
     {
+        Yellow,
+        Green,
+        Cyan,
+        Pink,
         Blue,
         Red,
         Black
@@ -55,6 +60,8 @@ namespace PathSnip
         private AnnotationThickness _rectThickness = AnnotationThickness.Medium;
         private AnnotationColor _arrowColor = AnnotationColor.Blue;
         private AnnotationThickness _arrowThickness = AnnotationThickness.Medium;
+        private AnnotationColor _highlighterColor = AnnotationColor.Yellow;
+        private AnnotationThickness _highlighterThickness = AnnotationThickness.Thick;
         private AnnotationThickness _mosaicThickness = AnnotationThickness.Medium;
 
         // 记录拖拽开始时的四个虚拟边界（用于反向拖拽翻转）
@@ -811,6 +818,13 @@ namespace PathSnip
                         // 【核心修改】文字工具不需要属性栏，显式关闭
                         PropertyPopup.IsOpen = false;
                         break;
+                    case "Highlighter":
+                        _currentTool = AnnotationTool.Highlighter;
+                        UpdateToolContextStyle();
+                        _currentAnnotationTool = AnnotationToolFactory.Create(AnnotationType.Highlighter);
+                        _currentAnnotationTool.OnSelected(_toolContext);
+                        ShowPropertyPanel();
+                        break;
                     case "Mosaic":
                         _currentTool = AnnotationTool.Mosaic;
                         UpdateToolContextStyle();
@@ -850,6 +864,9 @@ namespace PathSnip
                 case AnnotationTool.Arrow:
                     color = GetColorFromEnum(_arrowColor);
                     break;
+                case AnnotationTool.Highlighter:
+                    color = GetHighlighterColorFromEnum(_highlighterColor);
+                    break;
                 default:
                     color = Colors.Blue;
                     break;
@@ -863,6 +880,9 @@ namespace PathSnip
                     break;
                 case AnnotationTool.Arrow:
                     thickness = GetThicknessValue(_arrowThickness);
+                    break;
+                case AnnotationTool.Highlighter:
+                    thickness = GetThicknessValue(_highlighterThickness) * 2;
                     break;
                 case AnnotationTool.Mosaic:
                     thickness = GetMosaicBlockSize();
@@ -889,6 +909,9 @@ namespace PathSnip
                 case AnnotationTool.Arrow:
                     color = GetColorFromEnum(_arrowColor);
                     break;
+                case AnnotationTool.Highlighter:
+                    color = GetHighlighterColorFromEnum(_highlighterColor);
+                    break;
                 default:
                     color = Colors.Blue;
                     break;
@@ -902,6 +925,9 @@ namespace PathSnip
                     break;
                 case AnnotationTool.Arrow:
                     thickness = GetThicknessValue(_arrowThickness);
+                    break;
+                case AnnotationTool.Highlighter:
+                    thickness = GetThicknessValue(_highlighterThickness) * 2;
                     break;
                 case AnnotationTool.Mosaic:
                     thickness = GetMosaicBlockSize();
@@ -931,6 +957,14 @@ namespace PathSnip
         {
             switch (colorEnum)
             {
+                case AnnotationColor.Yellow:
+                    return Color.FromRgb(255, 235, 59);
+                case AnnotationColor.Green:
+                    return Color.FromRgb(163, 230, 53);
+                case AnnotationColor.Cyan:
+                    return Color.FromRgb(34, 211, 238);
+                case AnnotationColor.Pink:
+                    return Color.FromRgb(244, 114, 182);
                 case AnnotationColor.Blue:
                     return Color.FromRgb(0, 120, 212);
                 case AnnotationColor.Red:
@@ -940,6 +974,12 @@ namespace PathSnip
                 default:
                     return Colors.Blue;
             }
+        }
+
+        private Color GetHighlighterColorFromEnum(AnnotationColor colorEnum)
+        {
+            var baseColor = GetColorFromEnum(colorEnum);
+            return Color.FromArgb(102, baseColor.R, baseColor.G, baseColor.B);
         }
 
         /// <summary>
@@ -1315,9 +1355,33 @@ namespace PathSnip
         private Color GetCurrentColor()
         {
             // 获取当前工具对应的颜色
-            var color = _currentTool == AnnotationTool.Rectangle ? _rectColor : _arrowColor;
+            AnnotationColor color;
+            switch (_currentTool)
+            {
+                case AnnotationTool.Rectangle:
+                    color = _rectColor;
+                    break;
+                case AnnotationTool.Arrow:
+                    color = _arrowColor;
+                    break;
+                case AnnotationTool.Highlighter:
+                    color = _highlighterColor;
+                    break;
+                default:
+                    color = AnnotationColor.Blue;
+                    break;
+            }
+
             switch (color)
             {
+                case AnnotationColor.Yellow:
+                    return Color.FromRgb(255, 235, 59);
+                case AnnotationColor.Green:
+                    return Color.FromRgb(163, 230, 53);
+                case AnnotationColor.Cyan:
+                    return Color.FromRgb(34, 211, 238);
+                case AnnotationColor.Pink:
+                    return Color.FromRgb(244, 114, 182);
                 case AnnotationColor.Blue:
                     return Color.FromRgb(0, 120, 212);   // #0078D4
                 case AnnotationColor.Red:
@@ -1332,17 +1396,22 @@ namespace PathSnip
         private double GetCurrentThickness()
         {
             // 获取当前工具对应的粗细
-            var thickness = _currentTool == AnnotationTool.Rectangle ? _rectThickness : _arrowThickness;
+            var thickness = _currentTool == AnnotationTool.Rectangle
+                ? _rectThickness
+                : _currentTool == AnnotationTool.Arrow
+                    ? _arrowThickness
+                    : _highlighterThickness;
+
             switch (thickness)
             {
                 case AnnotationThickness.Thin:
-                    return 1;
+                    return _currentTool == AnnotationTool.Highlighter ? 8 : 1;
                 case AnnotationThickness.Medium:
-                    return 2;
+                    return _currentTool == AnnotationTool.Highlighter ? 12 : 2;
                 case AnnotationThickness.Thick:
-                    return 4;
+                    return _currentTool == AnnotationTool.Highlighter ? 16 : 4;
                 default:
-                    return 2;
+                    return _currentTool == AnnotationTool.Highlighter ? 12 : 2;
             }
         }
 
@@ -1350,9 +1419,21 @@ namespace PathSnip
         {
             if (sender is RadioButton rb && rb.Tag is string colorName)
             {
-                var color = AnnotationColor.Blue;
+                AnnotationColor color;
                 switch (colorName)
                 {
+                    case "#FFEB3B":
+                        color = AnnotationColor.Yellow;
+                        break;
+                    case "#A3E635":
+                        color = AnnotationColor.Green;
+                        break;
+                    case "#22D3EE":
+                        color = AnnotationColor.Cyan;
+                        break;
+                    case "#F472B6":
+                        color = AnnotationColor.Pink;
+                        break;
                     case "#0078D4":
                         color = AnnotationColor.Blue;
                         break;
@@ -1362,6 +1443,8 @@ namespace PathSnip
                     case "#333333":
                         color = AnnotationColor.Black;
                         break;
+                    default:
+                        return;
                 }
 
                 // 保存到当前工具的属性
@@ -1369,6 +1452,10 @@ namespace PathSnip
                     _rectColor = color;
                 else if (_currentTool == AnnotationTool.Arrow)
                     _arrowColor = color;
+                else if (_currentTool == AnnotationTool.Highlighter)
+                    _highlighterColor = color;
+                else
+                    return;
 
                 // 立即更新UI
                 UpdatePropertyPanelUI();
@@ -1401,6 +1488,8 @@ namespace PathSnip
                     _rectThickness = thickness;
                 else if (_currentTool == AnnotationTool.Arrow)
                     _arrowThickness = thickness;
+                else if (_currentTool == AnnotationTool.Highlighter)
+                    _highlighterThickness = thickness;
                 else if (_currentTool == AnnotationTool.Mosaic)
                     _mosaicThickness = thickness;
 
@@ -1429,6 +1518,7 @@ namespace PathSnip
             RadioButton currentToolBtn = null;
             if (_currentTool == AnnotationTool.Rectangle) currentToolBtn = RectToolBtn;
             else if (_currentTool == AnnotationTool.Arrow) currentToolBtn = ArrowToolBtn;
+            else if (_currentTool == AnnotationTool.Highlighter) currentToolBtn = HighlighterToolBtn;
 
             if (currentToolBtn != null)
             {
@@ -1437,8 +1527,9 @@ namespace PathSnip
 
                 var offsetX = -30;
                 var btnPos = currentToolBtn.TranslatePoint(new Point(0, 0), this);
+                double popupWidth = Math.Max(120, PropertyPanel.ActualWidth);
                 if (btnPos.X + offsetX < 0) offsetX = (int)(-btnPos.X);
-                else if (btnPos.X + offsetX + 120 > ActualWidth) offsetX = (int)(ActualWidth - btnPos.X - 120);
+                else if (btnPos.X + offsetX + popupWidth > ActualWidth) offsetX = (int)(ActualWidth - btnPos.X - popupWidth);
 
                 PropertyPopup.HorizontalOffset = offsetX;
                 PropertyPopup.VerticalOffset = -10;
@@ -1478,8 +1569,9 @@ namespace PathSnip
 
             var offsetX = -30;
             var btnPos = MosaicToolBtn.TranslatePoint(new Point(0, 0), this);
+            double popupWidth = Math.Max(120, PropertyPanel.ActualWidth);
             if (btnPos.X + offsetX < 0) offsetX = (int)(-btnPos.X);
-            else if (btnPos.X + offsetX + 120 > ActualWidth) offsetX = (int)(ActualWidth - btnPos.X - 120);
+            else if (btnPos.X + offsetX + popupWidth > ActualWidth) offsetX = (int)(ActualWidth - btnPos.X - popupWidth);
 
             PropertyPopup.HorizontalOffset = offsetX;
             PropertyPopup.VerticalOffset = -10;
@@ -1497,10 +1589,45 @@ namespace PathSnip
         private void UpdatePropertyPanelUI()
         {
             // 根据当前工具的设置更新UI选中状态
-            var color = _currentTool == AnnotationTool.Rectangle ? _rectColor : _arrowColor;
-            var thickness = _currentTool == AnnotationTool.Rectangle ? _rectThickness : _arrowThickness;
+            AnnotationColor color;
+            switch (_currentTool)
+            {
+                case AnnotationTool.Rectangle:
+                    color = _rectColor;
+                    break;
+                case AnnotationTool.Arrow:
+                    color = _arrowColor;
+                    break;
+                case AnnotationTool.Highlighter:
+                    color = _highlighterColor;
+                    break;
+                default:
+                    color = AnnotationColor.Blue;
+                    break;
+            }
+
+            AnnotationThickness thickness;
+            switch (_currentTool)
+            {
+                case AnnotationTool.Rectangle:
+                    thickness = _rectThickness;
+                    break;
+                case AnnotationTool.Arrow:
+                    thickness = _arrowThickness;
+                    break;
+                case AnnotationTool.Highlighter:
+                    thickness = _highlighterThickness;
+                    break;
+                default:
+                    thickness = AnnotationThickness.Medium;
+                    break;
+            }
 
             // 更新颜色选中状态
+            ColorYellow.IsChecked = color == AnnotationColor.Yellow;
+            ColorGreen.IsChecked = color == AnnotationColor.Green;
+            ColorCyan.IsChecked = color == AnnotationColor.Cyan;
+            ColorPink.IsChecked = color == AnnotationColor.Pink;
             ColorBlue.IsChecked = color == AnnotationColor.Blue;
             ColorRed.IsChecked = color == AnnotationColor.Red;
             ColorBlack.IsChecked = color == AnnotationColor.Black;
@@ -1677,6 +1804,10 @@ namespace PathSnip
 
             // 如果之前处于某种绘图工具状态，应该恢复显示属性栏
             if (_currentTool == AnnotationTool.Rectangle || _currentTool == AnnotationTool.Arrow)
+            {
+                ShowPropertyPanel();
+            }
+            else if (_currentTool == AnnotationTool.Highlighter)
             {
                 ShowPropertyPanel();
             }
