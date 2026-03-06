@@ -109,12 +109,6 @@ namespace PathSnip
             // 初始化全屏遮罩矩形
             FullScreenGeometry.Rect = new Rect(0, 0, Width, Height);
 
-            // 将 PrepareMosaicBackground 移到 Loaded 事件中（此时 Window 已挂载到 Visual Tree，可获取真实 DPI）
-            Loaded += (s, e) =>
-            {
-                PrepareMosaicBackground();
-            };
-
             // 初始化放大镜
             // MagnifierUI.Visibility = Visibility.Visible; // 移至 Loaded 事件中
 
@@ -211,6 +205,8 @@ namespace PathSnip
 
             // 销毁上下文，下次框选重新生成干净的
             _toolContext = null;
+            _mosaicBackground = null;
+            _mosaicBackgroundSelection = Rect.Empty;
         }
 
         private void ResetToInitialState()
@@ -249,6 +245,8 @@ namespace PathSnip
 
             // 销毁上下文
             _toolContext = null;
+            _mosaicBackground = null;
+            _mosaicBackgroundSelection = Rect.Empty;
 
             // 更新工具栏状态
             UpdateToolbarSelection();
@@ -554,6 +552,13 @@ namespace PathSnip
             {
                 // 更新选区边界
                 _toolContext.SelectionBounds = _currentRect;
+
+                if (_mosaicBackground != null && !AreRectsEquivalent(_mosaicBackgroundSelection, _currentRect))
+                {
+                    _mosaicBackground = null;
+                    _mosaicBackgroundSelection = Rect.Empty;
+                    _toolContext.MosaicBackground = null;
+                }
             }
         }
 
@@ -628,12 +633,38 @@ namespace PathSnip
 
         // 预渲染的马赛克背景（用于自由涂抹）
         private BitmapSource _mosaicBackground;
+        private Rect _mosaicBackgroundSelection = Rect.Empty;
         private double _dpiScaleX = 1.0;
         private double _dpiScaleY = 1.0;
 
-        private void PrepareMosaicBackground()
+        private static bool AreRectsEquivalent(Rect first, Rect second)
+        {
+            const double epsilon = 0.5;
+            return Math.Abs(first.X - second.X) < epsilon &&
+                   Math.Abs(first.Y - second.Y) < epsilon &&
+                   Math.Abs(first.Width - second.Width) < epsilon &&
+                   Math.Abs(first.Height - second.Height) < epsilon;
+        }
+
+        private void EnsureMosaicBackgroundForCurrentSelection()
+        {
+            if (_currentRect.Width <= 0 || _currentRect.Height <= 0)
+            {
+                return;
+            }
+
+            if (_mosaicBackground != null && AreRectsEquivalent(_mosaicBackgroundSelection, _currentRect))
+            {
+                return;
+            }
+
+            PrepareMosaicBackground(_currentRect);
+        }
+
+        private void PrepareMosaicBackground(Rect selectionBounds)
         {
             if (BackgroundImage.Source == null) return;
+            if (selectionBounds.Width <= 0 || selectionBounds.Height <= 0) return;
 
             // 获取 DPI 缩放因子
             PresentationSource source = PresentationSource.FromVisual(this);
@@ -646,34 +677,52 @@ namespace PathSnip
             var bg = BackgroundImage.Source as BitmapSource;
             if (bg == null) return;
 
-            // 创建全屏马赛克背景（预渲染一次，性能优化）
-            int width = (int)(Width * _dpiScaleX);
-            int height = (int)(Height * _dpiScaleY);
+            int cropX = Math.Max(0, (int)Math.Floor(selectionBounds.Left * _dpiScaleX));
+            int cropY = Math.Max(0, (int)Math.Floor(selectionBounds.Top * _dpiScaleY));
+            int cropWidth = (int)Math.Ceiling(selectionBounds.Width * _dpiScaleX);
+            int cropHeight = (int)Math.Ceiling(selectionBounds.Height * _dpiScaleY);
+
+            cropWidth = Math.Min(cropWidth, bg.PixelWidth - cropX);
+            cropHeight = Math.Min(cropHeight, bg.PixelHeight - cropY);
+
+            if (cropWidth <= 0 || cropHeight <= 0)
+            {
+                return;
+            }
+
+            var croppedBitmap = new CroppedBitmap(bg, new Int32Rect(cropX, cropY, cropWidth, cropHeight));
 
             // 缩放到较小尺寸
-            int smallWidth = Math.Max(1, width / 32);
-            int smallHeight = Math.Max(1, height / 32);
+            int smallWidth = Math.Max(1, cropWidth / 32);
+            int smallHeight = Math.Max(1, cropHeight / 32);
 
-            var smallBitmap = new TransformedBitmap(bg, new ScaleTransform(
-                (double)smallWidth / width,
-                (double)smallHeight / height));
+            var smallBitmap = new TransformedBitmap(croppedBitmap, new ScaleTransform(
+                (double)smallWidth / cropWidth,
+                (double)smallHeight / cropHeight));
 
             // 放大回来，使用邻近插值
             var renderBitmap = new TransformedBitmap(smallBitmap, new ScaleTransform(
-                (double)width / smallWidth,
-                (double)height / smallHeight));
+                (double)cropWidth / smallWidth,
+                (double)cropHeight / smallHeight));
 
             // 创建可用的位图
             var visual = new DrawingVisual();
             using (var dc = visual.RenderOpen())
             {
-                dc.DrawImage(renderBitmap, new Rect(0, 0, width, height));
+                dc.DrawImage(renderBitmap, new Rect(0, 0, cropWidth, cropHeight));
             }
 
-            var result = new RenderTargetBitmap(width, height, 96 * _dpiScaleX, 96 * _dpiScaleY, PixelFormats.Pbgra32);
+            var result = new RenderTargetBitmap(cropWidth, cropHeight, 96 * _dpiScaleX, 96 * _dpiScaleY, PixelFormats.Pbgra32);
             result.Render(visual);
+            result.Freeze();
 
             _mosaicBackground = result;
+            _mosaicBackgroundSelection = selectionBounds;
+
+            if (_toolContext != null)
+            {
+                _toolContext.MosaicBackground = _mosaicBackground;
+            }
         }
 
         private void AnnotationCanvas_MouseMove(object sender, MouseEventArgs e)
@@ -739,6 +788,11 @@ namespace PathSnip
                     case "Mosaic":
                         _currentTool = AnnotationTool.Mosaic;
                         UpdateToolContextStyle();
+                        EnsureMosaicBackgroundForCurrentSelection();
+                        if (_toolContext != null)
+                        {
+                            _toolContext.MosaicBackground = _mosaicBackground;
+                        }
                         _currentAnnotationTool = AnnotationToolFactory.Create(AnnotationType.Mosaic);
                         _currentAnnotationTool.OnSelected(_toolContext);
                         ShowPropertyPanelForMosaic();

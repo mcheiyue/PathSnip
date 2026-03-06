@@ -157,6 +157,9 @@ namespace PathSnip.Tools
             }
 
             // 使用 ImageBrush，把全屏的马赛克底图作为画笔的"颜料"
+            double viewportWidth = SelectionBounds.Width > 0 ? SelectionBounds.Width : MosaicBackground.Width;
+            double viewportHeight = SelectionBounds.Height > 0 ? SelectionBounds.Height : MosaicBackground.Height;
+
             return new ImageBrush(MosaicBackground)
             {
                 Stretch = Stretch.None,
@@ -164,7 +167,7 @@ namespace PathSnip.Tools
                 AlignmentY = AlignmentY.Top,
                 Viewbox = new Rect(0, 0, MosaicBackground.Width, MosaicBackground.Height),
                 ViewboxUnits = BrushMappingMode.Absolute,
-                Viewport = new Rect(0, 0, MosaicBackground.Width, MosaicBackground.Height),
+                Viewport = new Rect(SelectionBounds.Left, SelectionBounds.Top, viewportWidth, viewportHeight),
                 ViewportUnits = BrushMappingMode.Absolute
             };
         }
