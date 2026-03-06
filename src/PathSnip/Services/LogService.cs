@@ -33,6 +33,7 @@ namespace PathSnip.Services
         private const int LogQueueCapacity = 2000;
         private const int BatchSize = 20;
         private const int FlushIntervalMs = 100;
+        private const int RetentionDays = 7;
         private static readonly TimeSpan ShutdownFlushTimeout = TimeSpan.FromSeconds(2);
         private static readonly string AppSessionId = Guid.NewGuid().ToString("N").Substring(0, 12);
 
@@ -58,6 +59,8 @@ namespace PathSnip.Services
                 Name = "PathSnipLogWorker"
             };
             LogWorkerThread.Start();
+
+            CleanupOldLogs();
 
             AppDomain.CurrentDomain.ProcessExit += (_, __) => ShutdownLogWorker();
         }
@@ -283,6 +286,64 @@ namespace PathSnip.Services
             {
                 TryWriteFallback($"[{DateTime.Now:yyyy-MM-dd HH:mm:ss}] level=ERROR event=logger.shutdown_failed{Environment.NewLine}");
             }
+        }
+
+        private static void CleanupOldLogs()
+        {
+            DateTime startedAt = DateTime.UtcNow;
+            DateTime cutoffDate = DateTime.Today.AddDays(-RetentionDays);
+            string todayFileName = $"{DateTime.Today:yyyy-MM-dd}.log";
+            int scanned = 0;
+            int deleted = 0;
+            int failed = 0;
+
+            try
+            {
+                foreach (string path in Directory.EnumerateFiles(LogDirectory, "*.log", SearchOption.TopDirectoryOnly))
+                {
+                    string fileName = Path.GetFileName(path);
+                    if (string.Equals(fileName, "logger-fallback.log", StringComparison.OrdinalIgnoreCase) ||
+                        string.Equals(fileName, todayFileName, StringComparison.OrdinalIgnoreCase))
+                    {
+                        continue;
+                    }
+
+                    if (!TryParseDailyLogDate(fileName, out DateTime logDate))
+                    {
+                        continue;
+                    }
+
+                    scanned++;
+                    if (logDate >= cutoffDate)
+                    {
+                        continue;
+                    }
+
+                    try
+                    {
+                        File.Delete(path);
+                        deleted++;
+                    }
+                    catch (Exception ex)
+                    {
+                        failed++;
+                        LogException("logger.cleanup.file_failed", ex, $"file={fileName}", stage: "logger.cleanup");
+                    }
+                }
+
+                long elapsedMs = (long)(DateTime.UtcNow - startedAt).TotalMilliseconds;
+                LogInfo("logger.cleanup.completed", $"retentionDays={RetentionDays} cutoff={cutoffDate:yyyy-MM-dd} scanned={scanned} deleted={deleted} failed={failed} elapsedMs={elapsedMs}", stage: "logger.cleanup");
+            }
+            catch (Exception ex)
+            {
+                LogException("logger.cleanup.failed", ex, $"retentionDays={RetentionDays}", stage: "logger.cleanup");
+            }
+        }
+
+        private static bool TryParseDailyLogDate(string fileName, out DateTime logDate)
+        {
+            string fileNameWithoutExtension = Path.GetFileNameWithoutExtension(fileName);
+            return DateTime.TryParseExact(fileNameWithoutExtension, "yyyy-MM-dd", CultureInfo.InvariantCulture, DateTimeStyles.None, out logDate);
         }
     }
 }
