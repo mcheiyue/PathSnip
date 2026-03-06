@@ -956,7 +956,7 @@ namespace PathSnip
             }
         }
 
-        private void Window_KeyDown(object sender, KeyEventArgs e)
+        private async void Window_KeyDown(object sender, KeyEventArgs e)
         {
             if (e.Key == Key.Escape)
             {
@@ -1006,19 +1006,7 @@ namespace PathSnip
                     // 播放系统提示音
                     System.Media.SystemSounds.Asterisk.Play();
 
-                    // 2. 开启独立的 STA 线程去写入剪贴板，彻底告别主线程卡顿
-                    System.Threading.Thread thread = new System.Threading.Thread(() =>
-                    {
-                        try
-                        {
-                            ClipboardService.SetText(hexWithPrefix);
-                        }
-                        catch
-                        {
-                        }
-                    });
-                    thread.SetApartmentState(System.Threading.ApartmentState.STA);
-                    thread.Start();
+                    await ClipboardService.TrySetTextAsync(hexWithPrefix);
                 }
                 e.Handled = true;
             }

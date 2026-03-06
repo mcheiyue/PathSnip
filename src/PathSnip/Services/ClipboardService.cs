@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Concurrent;
 using System.Threading;
 using System.Threading.Tasks;
 using System.Windows;
@@ -8,6 +9,33 @@ namespace PathSnip.Services
 {
     public static class ClipboardService
     {
+        private sealed class ClipboardWorkItem
+        {
+            public ClipboardWorkItem(Action action, TaskCompletionSource<bool> completion)
+            {
+                Action = action;
+                Completion = completion;
+            }
+
+            public Action Action { get; }
+            public TaskCompletionSource<bool> Completion { get; }
+        }
+
+        private static readonly BlockingCollection<ClipboardWorkItem> ClipboardQueue =
+            new BlockingCollection<ClipboardWorkItem>(new ConcurrentQueue<ClipboardWorkItem>());
+
+        static ClipboardService()
+        {
+            var workerThread = new Thread(ProcessClipboardQueue)
+            {
+                IsBackground = true,
+                Name = "ClipboardServiceWorker"
+            };
+
+            workerThread.SetApartmentState(ApartmentState.STA);
+            workerThread.Start();
+        }
+
         public static Task<bool> TrySetTextAsync(string text)
         {
             return RunStaClipboardActionAsync(() => SetText(text));
@@ -40,44 +68,39 @@ namespace PathSnip.Services
 
         private static Task<bool> RunStaClipboardActionAsync(Action action)
         {
-            if (Thread.CurrentThread.GetApartmentState() == ApartmentState.STA)
+            var tcs = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
+
+            try
             {
-                try
-                {
-                    action();
-                    return Task.FromResult(true);
-                }
-                catch (Exception ex)
-                {
-                    LogService.LogError("异步剪贴板操作失败", ex);
-                    return Task.FromResult(false);
-                }
+                ClipboardQueue.Add(new ClipboardWorkItem(action, tcs));
             }
-
-            var tcs = new TaskCompletionSource<bool>();
-
-            var thread = new Thread(() =>
+            catch (Exception ex)
             {
-                try
-                {
-                    action();
-                    tcs.TrySetResult(true);
-                }
-                catch (Exception ex)
-                {
-                    LogService.LogError("异步剪贴板操作失败", ex);
-                    tcs.TrySetResult(false);
-                }
-            });
-
-            thread.SetApartmentState(ApartmentState.STA);
-            thread.IsBackground = true;
-            thread.Start();
+                LogService.LogError("队列化剪贴板操作失败", ex);
+                tcs.TrySetResult(false);
+            }
 
             return tcs.Task;
         }
 
-        public static void SetText(string text)
+        private static void ProcessClipboardQueue()
+        {
+            foreach (var workItem in ClipboardQueue.GetConsumingEnumerable())
+            {
+                try
+                {
+                    workItem.Action();
+                    workItem.Completion.TrySetResult(true);
+                }
+                catch (Exception ex)
+                {
+                    LogService.LogError("异步剪贴板操作失败", ex);
+                    workItem.Completion.TrySetResult(false);
+                }
+            }
+        }
+
+        private static void SetText(string text)
         {
             for (int i = 0; i < 3; i++)
             {
@@ -97,12 +120,12 @@ namespace PathSnip.Services
                         LogService.LogError("复制到剪贴板失败", ex);
                         throw;
                     }
-                    System.Threading.Thread.Sleep(50);
+                    Thread.Sleep(50);
                 }
             }
         }
 
-        public static void SetImage(BitmapSource bitmap)
+        private static void SetImage(BitmapSource bitmap)
         {
             for (int i = 0; i < 3; i++)
             {
@@ -122,12 +145,12 @@ namespace PathSnip.Services
                         LogService.LogError("复制图片到剪贴板失败", ex);
                         throw;
                     }
-                    System.Threading.Thread.Sleep(50);
+                    Thread.Sleep(50);
                 }
             }
         }
 
-        public static void SetImageAndPath(BitmapSource bitmap, string path)
+        private static void SetImageAndPath(BitmapSource bitmap, string path)
         {
             for (int i = 0; i < 3; i++)
             {
@@ -149,7 +172,7 @@ namespace PathSnip.Services
                         LogService.LogError("复制到剪贴板失败", ex);
                         throw;
                     }
-                    System.Threading.Thread.Sleep(50);
+                    Thread.Sleep(50);
                 }
             }
         }
