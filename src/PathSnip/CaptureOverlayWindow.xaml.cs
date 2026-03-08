@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Diagnostics;
+using System.Threading;
 using System.Threading.Tasks;
 using System.Windows;
 using System.Windows.Controls;
@@ -83,8 +84,13 @@ namespace PathSnip
         // 窗口吸附相关变量
         private DateTime _lastWindowDetectionTime = DateTime.MinValue;
         private readonly int _currentProcessId;
-        private readonly SnapEngine _snapEngine = new SnapEngine(new ISnapProvider[] { new WindowSnapProvider() });
+        private readonly SnapEngine _snapEngine = new SnapEngine(new ISnapProvider[] { new WindowSnapProvider() }, new UiaSnapProvider());
         private SnapResult _currentSnapResult = SnapResult.None;
+        private readonly DispatcherTimer _elementSnapHoverTimer;
+        private CancellationTokenSource _elementSnapCts;
+        private Point _lastHoverMousePosition;
+        private const int ElementSnapHoverDelayMs = 100;
+        private const int ElementSnapTimeoutMs = 100;
 
         // 放大镜相关变量
         private string _currentColorHex = "";
@@ -136,6 +142,14 @@ namespace PathSnip
             MouseMove += OnMouseMove;
             MouseLeftButtonUp += OnMouseLeftButtonUp;
             MouseRightButtonDown += OnMouseRightButtonDown;
+
+            _elementSnapHoverTimer = new DispatcherTimer
+            {
+                Interval = TimeSpan.FromMilliseconds(ElementSnapHoverDelayMs)
+            };
+            _elementSnapHoverTimer.Tick += ElementSnapHoverTimer_Tick;
+
+            Closed += (s, e) => StopElementSnapUpgrade();
 
             // 标注画布事件
             AnnotationCanvas.MouseLeftButtonDown += AnnotationCanvas_MouseLeftButtonDown;
@@ -208,6 +222,7 @@ namespace PathSnip
 
         private void ResetToSelectingState()
         {
+            StopElementSnapUpgrade();
             _selectionSession.Reset();
             _currentSnapResult = SnapResult.None;
             _selectionCompleted = false;
@@ -251,6 +266,7 @@ namespace PathSnip
 
         private void ResetToInitialState()
         {
+            StopElementSnapUpgrade();
             _selectionSession.Reset();
             _currentSnapResult = SnapResult.None;
             _selectionCompleted = false;
@@ -307,6 +323,8 @@ namespace PathSnip
         {
             if (_selectionCompleted) return;
 
+            StopElementSnapUpgrade();
+
             SelectionCanvas.Focus();
             _hasStartedSelection = true;
 
@@ -345,6 +363,8 @@ namespace PathSnip
                     UpdateSnapTargetUnderCursor(e, requestVersion);
                 }
 
+                ScheduleElementSnapUpgrade(mousePos);
+
                 // 显式恢复放大镜的可见性
                 MagnifierUI.Visibility = Visibility.Visible;
 
@@ -369,6 +389,7 @@ namespace PathSnip
                 WindowHighlightRect.Visibility = Visibility.Collapsed;
 
             MagnifierUI.Visibility = Visibility.Collapsed;
+            StopElementSnapUpgrade();
 
             if (!_selectionSession.IsSelecting) return;
 
@@ -401,27 +422,124 @@ namespace PathSnip
             }
 
             _currentSnapResult = snapResult;
+            ApplySnapHighlight(_currentSnapResult);
+        }
 
-            if (_currentSnapResult.IsValid && _currentSnapResult.Bounds.HasValue && WindowHighlightRect != null)
-            {
-                Rect rect = _currentSnapResult.Bounds.Value;
-                // 转换为相对于 CaptureOverlayWindow 的坐标
-                var relativeRect = new Rect(
-                    rect.Left - Left,
-                    rect.Top - Top,
-                    rect.Width,
-                    rect.Height);
+        private void ScheduleElementSnapUpgrade(Point mousePos)
+        {
+            _lastHoverMousePosition = mousePos;
 
-                Canvas.SetLeft(WindowHighlightRect, relativeRect.Left);
-                Canvas.SetTop(WindowHighlightRect, relativeRect.Top);
-                WindowHighlightRect.Width = relativeRect.Width;
-                WindowHighlightRect.Height = relativeRect.Height;
-                WindowHighlightRect.Visibility = Visibility.Visible;
-            }
-            else if (WindowHighlightRect != null)
+            if (_selectionSession.IsSelecting || _selectionCompleted)
             {
-                WindowHighlightRect.Visibility = Visibility.Collapsed;
+                return;
             }
+
+            _elementSnapHoverTimer.Stop();
+            _elementSnapHoverTimer.Start();
+        }
+
+        private async void ElementSnapHoverTimer_Tick(object sender, EventArgs e)
+        {
+            _elementSnapHoverTimer.Stop();
+
+            if (_selectionSession.IsSelecting || _selectionCompleted)
+            {
+                return;
+            }
+
+            if (!_currentSnapResult.IsValid || !_currentSnapResult.Bounds.HasValue)
+            {
+                return;
+            }
+
+            CancelElementSnapRequest();
+            var currentCts = new CancellationTokenSource();
+            _elementSnapCts = currentCts;
+
+            long requestVersion = _snapEngine.NextRequestVersion();
+            Point screenPos = new Point(_lastHoverMousePosition.X + Left, _lastHoverMousePosition.Y + Top);
+
+            try
+            {
+                SnapResult upgradedSnap = await _snapEngine.TryGetElementSnapAsync(
+                    screenPos,
+                    _currentProcessId,
+                    _currentSnapResult,
+                    requestVersion,
+                    ElementSnapTimeoutMs,
+                    currentCts.Token);
+
+                if (!_snapEngine.IsCurrentRequest(requestVersion))
+                {
+                    return;
+                }
+
+                if (_selectionSession.IsSelecting || _selectionCompleted)
+                {
+                    return;
+                }
+
+                if (!upgradedSnap.IsValid || !upgradedSnap.Bounds.HasValue)
+                {
+                    return;
+                }
+
+                _currentSnapResult = upgradedSnap;
+                ApplySnapHighlight(_currentSnapResult);
+            }
+            finally
+            {
+                if (ReferenceEquals(_elementSnapCts, currentCts))
+                {
+                    _elementSnapCts = null;
+                }
+
+                currentCts.Dispose();
+            }
+        }
+
+        private void ApplySnapHighlight(SnapResult snapResult)
+        {
+            if (!snapResult.IsValid || !snapResult.Bounds.HasValue || WindowHighlightRect == null)
+            {
+                if (WindowHighlightRect != null)
+                {
+                    WindowHighlightRect.Visibility = Visibility.Collapsed;
+                }
+
+                return;
+            }
+
+            Rect rect = snapResult.Bounds.Value;
+            var relativeRect = new Rect(
+                rect.Left - Left,
+                rect.Top - Top,
+                rect.Width,
+                rect.Height);
+
+            Canvas.SetLeft(WindowHighlightRect, relativeRect.Left);
+            Canvas.SetTop(WindowHighlightRect, relativeRect.Top);
+            WindowHighlightRect.Width = relativeRect.Width;
+            WindowHighlightRect.Height = relativeRect.Height;
+            WindowHighlightRect.Visibility = Visibility.Visible;
+        }
+
+        private void StopElementSnapUpgrade()
+        {
+            _elementSnapHoverTimer.Stop();
+            CancelElementSnapRequest();
+        }
+
+        private void CancelElementSnapRequest()
+        {
+            var cts = Interlocked.Exchange(ref _elementSnapCts, null);
+            if (cts == null)
+            {
+                return;
+            }
+
+            cts.Cancel();
+            cts.Dispose();
         }
 
         private void UpdateMagnifier(Point mousePos)
@@ -1233,6 +1351,7 @@ namespace PathSnip
         private void CancelCapture()
         {
             this.Focus();
+            StopElementSnapUpgrade();
             _selectionSession.Reset();
             _currentSnapResult = SnapResult.None;
             SelectionRect.Visibility = Visibility.Collapsed;
