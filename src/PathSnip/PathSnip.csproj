@@ -26,6 +26,10 @@
   </ItemGroup>
 
   <ItemGroup>
+    <Reference Include="Accessibility" />
+  </ItemGroup>
+
+  <ItemGroup>
     <Resource Include="Resources\PathSnip.ico" />
   </ItemGroup>
 

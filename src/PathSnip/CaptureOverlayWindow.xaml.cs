@@ -84,7 +84,7 @@ namespace PathSnip
         // 窗口吸附相关变量
         private DateTime _lastWindowDetectionTime = DateTime.MinValue;
         private readonly int _currentProcessId;
-        private readonly SnapEngine _snapEngine = new SnapEngine(new ISnapProvider[] { new WindowSnapProvider() }, new UiaSnapProvider());
+        private readonly SnapEngine _snapEngine = new SnapEngine(new ISnapProvider[] { new WindowSnapProvider() }, new UiaSnapProvider(), new MsaaSnapProvider());
         private SnapResult _currentSnapResult = SnapResult.None;
         private readonly DispatcherTimer _elementSnapHoverTimer;
         private CancellationTokenSource _elementSnapCts;
