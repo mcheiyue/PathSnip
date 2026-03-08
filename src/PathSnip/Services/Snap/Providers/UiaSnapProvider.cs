@@ -9,6 +9,7 @@ namespace PathSnip.Services.Snap
 {
     public sealed class UiaSnapProvider
     {
+        private const int DwmaExtendedFrameBounds = 9;
         private const double MinElementSize = 6;
         private const double WindowBoundsTolerance = 2;
         private const double MaxBoundsAreaScale = 1.02;
@@ -298,10 +299,10 @@ namespace PathSnip.Services.Snap
             scaleY = 1;
 
             IntPtr hwnd = currentSnap.WindowHandle.GetValueOrDefault(IntPtr.Zero);
-            RECT rawRect;
-            if (hwnd != IntPtr.Zero && GetWindowRect(hwnd, out rawRect))
+            Rect physicalBounds;
+            if (hwnd != IntPtr.Zero && TryGetPhysicalWindowBounds(hwnd, out physicalBounds))
             {
-                physicalWindowBounds = new Rect(rawRect.Left, rawRect.Top, Math.Max(1, rawRect.Right - rawRect.Left), Math.Max(1, rawRect.Bottom - rawRect.Top));
+                physicalWindowBounds = physicalBounds;
 
                 if (!logicalWindowBounds.IsEmpty && logicalWindowBounds.Width > 0 && logicalWindowBounds.Height > 0)
                 {
@@ -361,5 +362,30 @@ namespace PathSnip.Services.Snap
 
         [DllImport("user32.dll")]
         private static extern bool GetWindowRect(IntPtr hWnd, out RECT lpRect);
+
+        [DllImport("dwmapi.dll")]
+        private static extern int DwmGetWindowAttribute(IntPtr hwnd, int dwAttribute, out RECT pvAttribute, int cbAttribute);
+
+        private static bool TryGetPhysicalWindowBounds(IntPtr hwnd, out Rect bounds)
+        {
+            bounds = Rect.Empty;
+
+            RECT dwmRect;
+            int hr = DwmGetWindowAttribute(hwnd, DwmaExtendedFrameBounds, out dwmRect, Marshal.SizeOf(typeof(RECT)));
+            if (hr == 0 && dwmRect.Right > dwmRect.Left && dwmRect.Bottom > dwmRect.Top)
+            {
+                bounds = new Rect(dwmRect.Left, dwmRect.Top, dwmRect.Right - dwmRect.Left, dwmRect.Bottom - dwmRect.Top);
+                return true;
+            }
+
+            RECT rawRect;
+            if (GetWindowRect(hwnd, out rawRect) && rawRect.Right > rawRect.Left && rawRect.Bottom > rawRect.Top)
+            {
+                bounds = new Rect(rawRect.Left, rawRect.Top, rawRect.Right - rawRect.Left, rawRect.Bottom - rawRect.Top);
+                return true;
+            }
+
+            return false;
+        }
     }
 }

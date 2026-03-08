@@ -28,7 +28,7 @@ namespace PathSnip.Services.Snap
             double windowArea = Math.Max(1, windowBounds.Width * windowBounds.Height);
             double elementArea = Math.Max(1, elementBounds.Width * elementBounds.Height);
             double areaRatio = elementArea / windowArea;
-            if (elementBounds.Contains(cursorPoint) && areaRatio >= 0.01 && areaRatio <= 0.9)
+            if (elementBounds.Contains(cursorPoint) && areaRatio >= 0.005 && areaRatio <= 0.9)
             {
                 return true;
             }
@@ -43,7 +43,7 @@ namespace PathSnip.Services.Snap
             Rect windowBounds = windowSnap.Bounds.Value;
             Rect elementBounds = elementSnap.Bounds.Value;
 
-            double sourceWeight = elementSnap.Source == SnapSource.MSAA ? 35 : 32;
+            double sourceWeight = elementSnap.Source == SnapSource.MSAA ? 38 : 36;
             double cursorFitWeight = elementBounds.Contains(cursorPoint) ? 15 : 0;
 
             double windowArea = Math.Max(1, windowBounds.Width * windowBounds.Height);
@@ -83,8 +83,8 @@ namespace PathSnip.Services.Snap
         private static double ScoreWindow(SnapResult windowSnap, Point cursorPoint)
         {
             Rect windowBounds = windowSnap.Bounds.Value;
-            double baseScore = 34;
-            double cursorFitWeight = windowBounds.Contains(cursorPoint) ? 8 : 0;
+            double baseScore = 28;
+            double cursorFitWeight = windowBounds.Contains(cursorPoint) ? 6 : 0;
             return baseScore + cursorFitWeight;
         }
 

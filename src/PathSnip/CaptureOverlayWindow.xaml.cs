@@ -89,7 +89,7 @@ namespace PathSnip
         private readonly DispatcherTimer _elementSnapHoverTimer;
         private CancellationTokenSource _elementSnapCts;
         private Point _lastHoverMousePosition;
-        private const int ElementSnapHoverDelayMs = 100;
+        private const int ElementSnapHoverDelayMs = 40;
         private const int ElementSnapTimeoutMs = 100;
 
         // 放大镜相关变量
@@ -363,6 +363,16 @@ namespace PathSnip
                     UpdateSnapTargetUnderCursor(e, requestVersion);
                 }
 
+                if (_currentSnapResult.IsValid && _currentSnapResult.Kind == SnapKind.Element && _currentSnapResult.Bounds.HasValue)
+                {
+                    Point cursorScreenPoint = new Point(mousePos.X + Left, mousePos.Y + Top);
+                    if (!_currentSnapResult.Bounds.Value.Contains(cursorScreenPoint))
+                    {
+                        long requestVersion = _snapEngine.NextRequestVersion();
+                        UpdateSnapTargetUnderCursor(e, requestVersion);
+                    }
+                }
+
                 ScheduleElementSnapUpgrade(mousePos);
 
                 // 显式恢复放大镜的可见性
@@ -434,8 +444,10 @@ namespace PathSnip
                 return;
             }
 
-            _elementSnapHoverTimer.Stop();
-            _elementSnapHoverTimer.Start();
+            if (!_elementSnapHoverTimer.IsEnabled)
+            {
+                _elementSnapHoverTimer.Start();
+            }
         }
 
         private async void ElementSnapHoverTimer_Tick(object sender, EventArgs e)
