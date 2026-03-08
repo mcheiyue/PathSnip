@@ -83,7 +83,7 @@ namespace PathSnip
         // 窗口吸附相关变量
         private DateTime _lastWindowDetectionTime = DateTime.MinValue;
         private readonly int _currentProcessId;
-        private readonly ISnapService _snapService = new WindowSnapService();
+        private readonly SnapEngine _snapEngine = new SnapEngine(new ISnapProvider[] { new WindowSnapProvider() });
         private SnapResult _currentSnapResult = SnapResult.None;
 
         // 放大镜相关变量
@@ -341,7 +341,8 @@ namespace PathSnip
                 if ((now - _lastWindowDetectionTime).TotalMilliseconds >= 50)
                 {
                     _lastWindowDetectionTime = now;
-                    DetectWindowUnderCursor(e);
+                    long requestVersion = _snapEngine.NextRequestVersion();
+                    UpdateSnapTargetUnderCursor(e, requestVersion);
                 }
 
                 // 显式恢复放大镜的可见性
@@ -382,12 +383,24 @@ namespace PathSnip
             }
         }
 
-        private void DetectWindowUnderCursor(MouseEventArgs e)
+        private void UpdateSnapTargetUnderCursor(MouseEventArgs e, long requestVersion)
         {
+            if (!_snapEngine.IsCurrentRequest(requestVersion))
+            {
+                return;
+            }
+
             var mousePos = e.GetPosition(this);
             var screenPos = new Point(mousePos.X + Left, mousePos.Y + Top);
 
-            _currentSnapResult = _snapService.GetCurrentSnap(screenPos, _currentProcessId);
+            SnapResult snapResult = _snapEngine.GetCurrentSnap(screenPos, _currentProcessId);
+
+            if (!_snapEngine.IsCurrentRequest(requestVersion))
+            {
+                return;
+            }
+
+            _currentSnapResult = snapResult;
 
             if (_currentSnapResult.IsValid && _currentSnapResult.Bounds.HasValue && WindowHighlightRect != null)
             {
