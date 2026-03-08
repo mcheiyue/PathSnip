@@ -11,6 +11,8 @@ using System.Windows.Media.Imaging;
 using System.Windows.Shapes;
 using System.Windows.Threading;
 using PathSnip.Helpers;
+using PathSnip.Services.Overlay;
+using PathSnip.Services.Snap;
 using PathSnip.Services;
 using PathSnip.Tools;
 
@@ -50,7 +52,6 @@ namespace PathSnip
         private const byte HighlighterAlpha = 76;
 
         private Point _startPoint;
-        private bool _isSelecting;
         private bool _hasStartedSelection;  // 是否开始过选区（用于右键判断）
         private Rect _currentRect;
         private AnnotationTool _currentTool = AnnotationTool.None;
@@ -75,13 +76,15 @@ namespace PathSnip
 
         private bool _isDrawing;
         private bool _selectionCompleted;
+        private readonly SelectionSession _selectionSession = new SelectionSession();
+        private readonly SelectionBitmapComposer _selectionBitmapComposer = new SelectionBitmapComposer();
+        private readonly OverlayShortcutHandler _shortcutHandler = new OverlayShortcutHandler();
 
         // 窗口吸附相关变量
         private DateTime _lastWindowDetectionTime = DateTime.MinValue;
         private readonly int _currentProcessId;
-        private Rect? _detectedWindowRect;
-        private Rect? _potentialSnapRect;
-        private bool _isDragging;
+        private readonly ISnapService _snapService = new WindowSnapService();
+        private SnapResult _currentSnapResult = SnapResult.None;
 
         // 放大镜相关变量
         private string _currentColorHex = "";
@@ -205,6 +208,8 @@ namespace PathSnip
 
         private void ResetToSelectingState()
         {
+            _selectionSession.Reset();
+            _currentSnapResult = SnapResult.None;
             _selectionCompleted = false;
             _hasStartedSelection = false;
             Toolbar.Visibility = Visibility.Collapsed;
@@ -246,8 +251,9 @@ namespace PathSnip
 
         private void ResetToInitialState()
         {
+            _selectionSession.Reset();
+            _currentSnapResult = SnapResult.None;
             _selectionCompleted = false;
-            _isSelecting = false;
             _hasStartedSelection = false;
             _currentTool = AnnotationTool.None;
 
@@ -302,27 +308,25 @@ namespace PathSnip
             if (_selectionCompleted) return;
 
             SelectionCanvas.Focus();
-            _startPoint = e.GetPosition(SelectionCanvas);
-            _isSelecting = true;
             _hasStartedSelection = true;
-            _isDragging = false;
 
-            if (_detectedWindowRect.HasValue && WindowHighlightRect?.Visibility == Visibility.Visible)
+            Point startPoint = e.GetPosition(SelectionCanvas);
+            Rect? potentialSnapRect = null;
+
+            if (_currentSnapResult.IsValid && _currentSnapResult.Bounds.HasValue && WindowHighlightRect?.Visibility == Visibility.Visible)
             {
-                _potentialSnapRect = _detectedWindowRect;
+                potentialSnapRect = _currentSnapResult.Bounds;
                 WindowHighlightRect.Visibility = Visibility.Collapsed;
             }
-            else
-            {
-                _potentialSnapRect = null;
-            }
+
+            _selectionSession.Begin(startPoint, potentialSnapRect);
 
             SelectionRect.Visibility = Visibility.Visible;
             SizeLabel.Visibility = Visibility.Visible;
             HintText.Visibility = Visibility.Collapsed;
             OuterMask.Visibility = Visibility.Visible;
 
-            UpdateSelection(_startPoint, _startPoint);
+            UpdateSelection(_selectionSession.StartPoint, _selectionSession.StartPoint);
         }
 
         private void OnMouseMove(object sender, MouseEventArgs e)
@@ -330,7 +334,7 @@ namespace PathSnip
             var mousePos = e.GetPosition(this);
 
             // 窗口吸附检测 + 放大镜更新（仅在未开始框选时）
-            if (!_isSelecting && !_selectionCompleted)
+            if (!_selectionSession.IsSelecting && !_selectionCompleted)
             {
                 // 窗口吸附检测（50ms 节流）
                 var now = DateTime.Now;
@@ -365,24 +369,16 @@ namespace PathSnip
 
             MagnifierUI.Visibility = Visibility.Collapsed;
 
-            if (!_isSelecting) return;
+            if (!_selectionSession.IsSelecting) return;
 
             var currentPoint = e.GetPosition(SelectionCanvas);
 
-            // 防抖检测：如果移动超过 3 像素，说明用户想手动拉框
-            if (!_isDragging)
-            {
-                if (Math.Abs(currentPoint.X - _startPoint.X) > 3 || Math.Abs(currentPoint.Y - _startPoint.Y) > 3)
-                {
-                    _isDragging = true;
-                    _potentialSnapRect = null;
-                }
-            }
+            _selectionSession.Update(currentPoint, 3);
 
             // 实时更新拉框
-            if (_isDragging || _potentialSnapRect == null)
+            if (_selectionSession.IsDragging || !_selectionSession.HasPotentialSnapRect)
             {
-                UpdateSelection(_startPoint, currentPoint);
+                UpdateSelection(_selectionSession.StartPoint, currentPoint);
             }
         }
 
@@ -391,11 +387,11 @@ namespace PathSnip
             var mousePos = e.GetPosition(this);
             var screenPos = new Point(mousePos.X + Left, mousePos.Y + Top);
 
-            _detectedWindowRect = WindowDetectionService.GetWindowUnderCursor(screenPos, _currentProcessId);
+            _currentSnapResult = _snapService.GetCurrentSnap(screenPos, _currentProcessId);
 
-            if (_detectedWindowRect.HasValue && WindowHighlightRect != null)
+            if (_currentSnapResult.IsValid && _currentSnapResult.Bounds.HasValue && WindowHighlightRect != null)
             {
-                var rect = _detectedWindowRect.Value;
+                Rect rect = _currentSnapResult.Bounds.Value;
                 // 转换为相对于 CaptureOverlayWindow 的坐标
                 var relativeRect = new Rect(
                     rect.Left - Left,
@@ -471,14 +467,14 @@ namespace PathSnip
 
         private void OnMouseLeftButtonUp(object sender, MouseButtonEventArgs e)
         {
-            if (!_isSelecting) return;
+            if (!_selectionSession.IsSelecting) return;
 
-            _isSelecting = false;
+            _selectionSession.Complete();
 
             // 情况A：用户单击了鼠标（没有触发拖拽），且刚才鼠标下有窗口
-            if (_potentialSnapRect.HasValue && !_isDragging)
+            if (_selectionSession.HasPotentialSnapRect && !_selectionSession.IsDragging)
             {
-                var absoluteRect = _potentialSnapRect.Value;
+                Rect absoluteRect = _selectionSession.PotentialSnapRect.Value;
                 _currentRect = new Rect(
                     absoluteRect.Left - Left,
                     absoluteRect.Top - Top,
@@ -497,10 +493,10 @@ namespace PathSnip
                 }
                 return;
             }
-
+            
             // 情况B：用户手动拉框完毕
             var endPoint = e.GetPosition(SelectionCanvas);
-            var rect = GetRect(_startPoint, endPoint);
+            var rect = GetRect(_selectionSession.StartPoint, endPoint);
 
             if (rect.Width > 5 && rect.Height > 5)
             {
@@ -1111,49 +1107,29 @@ namespace PathSnip
 
         private async void Window_KeyDown(object sender, KeyEventArgs e)
         {
-            if (e.Key == Key.Escape)
-            {
-                CancelCapture();
-                e.Handled = true;
-            }
-            else if (IsPinShortcutKey(e.Key, e.ImeProcessedKey) && CanHandlePinShortcut())
-            {
-                PinBtn_Click(this, new RoutedEventArgs());
-                e.Handled = true;
-            }
-            else
-            {
-                if (!IsColorCopyKey(e.Key, e.ImeProcessedKey) || !CanHandleColorCopyShortcut())
-                {
-                    return;
-                }
+            OverlayShortcutAction action = _shortcutHandler.ResolveKeyDown(
+                e.Key,
+                e.ImeProcessedKey,
+                CanHandlePinShortcut(),
+                CanHandleColorCopyShortcut());
 
-                await CopyCurrentColorAsync();
+            if (await ExecuteShortcutActionAsync(action))
+            {
                 e.Handled = true;
             }
         }
 
         private async void Window_PreviewTextInput(object sender, TextCompositionEventArgs e)
         {
-            if (CanHandlePinShortcut() && string.Equals(e.Text, "t", StringComparison.OrdinalIgnoreCase))
+            OverlayShortcutAction action = _shortcutHandler.ResolveTextInput(
+                e.Text,
+                CanHandlePinShortcut(),
+                CanHandleColorCopyShortcut());
+
+            if (await ExecuteShortcutActionAsync(action))
             {
                 e.Handled = true;
-                PinBtn_Click(this, new RoutedEventArgs());
-                return;
             }
-
-            if (!CanHandleColorCopyShortcut())
-            {
-                return;
-            }
-
-            if (!string.Equals(e.Text, "c", StringComparison.OrdinalIgnoreCase))
-            {
-                return;
-            }
-
-            e.Handled = true;
-            await CopyCurrentColorAsync();
         }
 
         private bool CanHandlePinShortcut()
@@ -1176,16 +1152,25 @@ namespace PathSnip
             return !(Keyboard.FocusedElement is TextBoxBase);
         }
 
-        private static bool IsColorCopyKey(Key key, Key imeProcessedKey)
+        private async Task<bool> ExecuteShortcutActionAsync(OverlayShortcutAction action)
         {
-            return key == Key.C ||
-                (key == Key.ImeProcessed && imeProcessedKey == Key.C);
-        }
+            switch (action)
+            {
+                case OverlayShortcutAction.Cancel:
+                    CancelCapture();
+                    return true;
 
-        private static bool IsPinShortcutKey(Key key, Key imeProcessedKey)
-        {
-            return key == Key.T ||
-                (key == Key.ImeProcessed && imeProcessedKey == Key.T);
+                case OverlayShortcutAction.Pin:
+                    PinBtn_Click(this, new RoutedEventArgs());
+                    return true;
+
+                case OverlayShortcutAction.CopyColor:
+                    await CopyCurrentColorAsync();
+                    return true;
+
+                default:
+                    return false;
+            }
         }
 
         private async Task CopyCurrentColorAsync()
@@ -1235,6 +1220,8 @@ namespace PathSnip
         private void CancelCapture()
         {
             this.Focus();
+            _selectionSession.Reset();
+            _currentSnapResult = SnapResult.None;
             SelectionRect.Visibility = Visibility.Collapsed;
             SizeLabel.Visibility = Visibility.Collapsed;
             OuterMask.Visibility = Visibility.Collapsed;
@@ -1274,79 +1261,19 @@ namespace PathSnip
                 dpiY = 96.0 * source.CompositionTarget.TransformToDevice.M22;
             }
 
-            if (_currentRect.Width <= 0 || _currentRect.Height <= 0)
+            var request = new SelectionBitmapComposeRequest
             {
-                throw new InvalidOperationException("保存失败：选区尺寸无效。");
-            }
+                Background = background,
+                MosaicCanvas = MosaicCanvas,
+                AnnotationCanvas = AnnotationCanvas,
+                SelectionRect = _currentRect,
+                DpiX = dpiX,
+                DpiY = dpiY,
+                SurfaceWidth = ActualWidth,
+                SurfaceHeight = ActualHeight
+            };
 
-            int physicalWidth = Math.Max(1, (int)Math.Round(_currentRect.Width * dpiX / 96.0));
-            int physicalHeight = Math.Max(1, (int)Math.Round(_currentRect.Height * dpiY / 96.0));
-
-            var renderBitmap = new RenderTargetBitmap(physicalWidth, physicalHeight, dpiX, dpiY, PixelFormats.Pbgra32);
-            var drawingVisual = new DrawingVisual();
-            using (var dc = drawingVisual.RenderOpen())
-            {
-                int cropX = (int)Math.Floor(_currentRect.Left * dpiX / 96.0);
-                int cropY = (int)Math.Floor(_currentRect.Top * dpiY / 96.0);
-
-                cropX = Math.Max(0, Math.Min(cropX, Math.Max(0, background.PixelWidth - 1)));
-                cropY = Math.Max(0, Math.Min(cropY, Math.Max(0, background.PixelHeight - 1)));
-
-                int cropW = Math.Min(physicalWidth, background.PixelWidth - cropX);
-                int cropH = Math.Min(physicalHeight, background.PixelHeight - cropY);
-
-                if (cropW <= 0 || cropH <= 0)
-                {
-                    throw new InvalidOperationException($"保存失败：裁剪区域无效 ({cropX},{cropY},{cropW},{cropH})。background={background.PixelWidth}x{background.PixelHeight}");
-                }
-
-                var bgCropRect = new Int32Rect(cropX, cropY, cropW, cropH);
-                var croppedBackground = new CroppedBitmap(background, bgCropRect);
-
-                dc.DrawImage(croppedBackground, new Rect(0, 0, physicalWidth, physicalHeight));
-
-                if (MosaicCanvas.Children.Count > 0)
-                {
-                    dc.PushTransform(new TranslateTransform(-_currentRect.Left, -_currentRect.Top));
-
-                    var mosaicBrush = new VisualBrush(MosaicCanvas)
-                    {
-                        Stretch = Stretch.None,
-                        AlignmentX = AlignmentX.Left,
-                        AlignmentY = AlignmentY.Top,
-                        ViewboxUnits = BrushMappingMode.Absolute,
-                        Viewbox = new Rect(0, 0, ActualWidth, ActualHeight),
-                        ViewportUnits = BrushMappingMode.Absolute,
-                        Viewport = new Rect(0, 0, ActualWidth, ActualHeight)
-                    };
-
-                    dc.DrawRectangle(mosaicBrush, null, new Rect(0, 0, ActualWidth, ActualHeight));
-                    dc.Pop();
-                }
-
-                if (AnnotationCanvas.Children.Count > 0)
-                {
-                    dc.PushTransform(new TranslateTransform(-_currentRect.Left, -_currentRect.Top));
-
-                    var annotationBrush = new VisualBrush(AnnotationCanvas)
-                    {
-                        Stretch = Stretch.None,
-                        AlignmentX = AlignmentX.Left,
-                        AlignmentY = AlignmentY.Top,
-                        ViewboxUnits = BrushMappingMode.Absolute,
-                        Viewbox = new Rect(0, 0, ActualWidth, ActualHeight),
-                        ViewportUnits = BrushMappingMode.Absolute,
-                        Viewport = new Rect(0, 0, ActualWidth, ActualHeight)
-                    };
-
-                    dc.DrawRectangle(annotationBrush, null, new Rect(0, 0, ActualWidth, ActualHeight));
-                    dc.Pop();
-                }
-            }
-
-            renderBitmap.Render(drawingVisual);
-            renderBitmap.Freeze();
-            return renderBitmap;
+            return _selectionBitmapComposer.Compose(request);
         }
 
         private void SaveBtn_Click(object sender, RoutedEventArgs e)
