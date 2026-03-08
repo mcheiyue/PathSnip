@@ -91,6 +91,21 @@ namespace PathSnip
         private Point _lastHoverMousePosition;
         private const int ElementSnapHoverDelayMs = 40;
         private const int ElementSnapTimeoutMs = 100;
+        private const int ElementLockGraceMs = 120;
+        private const double ElementExitTolerancePx = 8;
+        private const double FastPointerSpeedThreshold = 900;
+        private SnapIntentMode _snapIntentMode = SnapIntentMode.WindowLock;
+        private DateTime _elementLockUntil = DateTime.MinValue;
+        private DateTime _lastPointerMoveAt = DateTime.MinValue;
+        private Point _lastPointerScreenPoint;
+        private double _pointerSpeedPxPerSecond;
+
+        private enum SnapIntentMode
+        {
+            WindowLock,
+            ElementProbe,
+            ElementLock
+        }
 
         // 放大镜相关变量
         private string _currentColorHex = "";
@@ -225,6 +240,7 @@ namespace PathSnip
             StopElementSnapUpgrade();
             _selectionSession.Reset();
             _currentSnapResult = SnapResult.None;
+            _snapIntentMode = SnapIntentMode.WindowLock;
             _selectionCompleted = false;
             _hasStartedSelection = false;
             Toolbar.Visibility = Visibility.Collapsed;
@@ -269,6 +285,7 @@ namespace PathSnip
             StopElementSnapUpgrade();
             _selectionSession.Reset();
             _currentSnapResult = SnapResult.None;
+            _snapIntentMode = SnapIntentMode.WindowLock;
             _selectionCompleted = false;
             _hasStartedSelection = false;
             _currentTool = AnnotationTool.None;
@@ -350,30 +367,22 @@ namespace PathSnip
         private void OnMouseMove(object sender, MouseEventArgs e)
         {
             var mousePos = e.GetPosition(this);
+            var now = DateTime.Now;
+            Point cursorScreenPoint = new Point(mousePos.X + Left, mousePos.Y + Top);
+            UpdatePointerMotion(cursorScreenPoint, now);
 
             // 窗口吸附检测 + 放大镜更新（仅在未开始框选时）
             if (!_selectionSession.IsSelecting && !_selectionCompleted)
             {
                 // 窗口吸附检测（50ms 节流）
-                var now = DateTime.Now;
                 if ((now - _lastWindowDetectionTime).TotalMilliseconds >= 50)
                 {
                     _lastWindowDetectionTime = now;
                     long requestVersion = _snapEngine.NextRequestVersion();
-                    UpdateSnapTargetUnderCursor(e, requestVersion);
+                    UpdateSnapTargetUnderCursor(e, requestVersion, now, cursorScreenPoint);
                 }
 
-                if (_currentSnapResult.IsValid && _currentSnapResult.Kind == SnapKind.Element && _currentSnapResult.Bounds.HasValue)
-                {
-                    Point cursorScreenPoint = new Point(mousePos.X + Left, mousePos.Y + Top);
-                    if (!_currentSnapResult.Bounds.Value.Contains(cursorScreenPoint))
-                    {
-                        long requestVersion = _snapEngine.NextRequestVersion();
-                        UpdateSnapTargetUnderCursor(e, requestVersion);
-                    }
-                }
-
-                ScheduleElementSnapUpgrade(mousePos);
+                ScheduleElementSnapUpgrade(mousePos, cursorScreenPoint, now);
 
                 // 显式恢复放大镜的可见性
                 MagnifierUI.Visibility = Visibility.Visible;
@@ -414,34 +423,73 @@ namespace PathSnip
             }
         }
 
-        private void UpdateSnapTargetUnderCursor(MouseEventArgs e, long requestVersion)
+        private void UpdateSnapTargetUnderCursor(MouseEventArgs e, long requestVersion, DateTime now, Point cursorScreenPoint)
         {
             if (!_snapEngine.IsCurrentRequest(requestVersion))
             {
                 return;
             }
 
-            var mousePos = e.GetPosition(this);
-            var screenPos = new Point(mousePos.X + Left, mousePos.Y + Top);
+            if (ShouldKeepElementLock(cursorScreenPoint, now))
+            {
+                return;
+            }
 
-            SnapResult snapResult = _snapEngine.GetCurrentSnap(screenPos, _currentProcessId);
+            SnapResult snapResult = _snapEngine.GetCurrentSnap(cursorScreenPoint, _currentProcessId);
 
             if (!_snapEngine.IsCurrentRequest(requestVersion))
             {
                 return;
             }
 
+            if (_currentSnapResult.IsValid && _currentSnapResult.Kind == SnapKind.Element &&
+                snapResult.IsValid && snapResult.Kind == SnapKind.Window &&
+                IsSameWindow(_currentSnapResult, snapResult) &&
+                !IsFastPointerMotion())
+            {
+                _snapIntentMode = SnapIntentMode.ElementProbe;
+                return;
+            }
+
             _currentSnapResult = snapResult;
+            _snapIntentMode = snapResult.Kind == SnapKind.Element ? SnapIntentMode.ElementLock : SnapIntentMode.WindowLock;
             ApplySnapHighlight(_currentSnapResult);
         }
 
-        private void ScheduleElementSnapUpgrade(Point mousePos)
+        private void ScheduleElementSnapUpgrade(Point mousePos, Point cursorScreenPoint, DateTime now)
         {
             _lastHoverMousePosition = mousePos;
 
             if (_selectionSession.IsSelecting || _selectionCompleted)
             {
                 return;
+            }
+
+            if (IsFastPointerMotion())
+            {
+                _snapIntentMode = SnapIntentMode.WindowLock;
+                _elementSnapHoverTimer.Stop();
+                CancelElementSnapRequest();
+                return;
+            }
+
+            if (_currentSnapResult.IsValid && _currentSnapResult.Kind == SnapKind.Element)
+            {
+                Rect elementBounds = _currentSnapResult.Bounds.GetValueOrDefault(Rect.Empty);
+                elementBounds.Inflate(ElementExitTolerancePx, ElementExitTolerancePx);
+                if (elementBounds.Contains(cursorScreenPoint))
+                {
+                    _snapIntentMode = SnapIntentMode.ElementLock;
+                    _elementLockUntil = now.AddMilliseconds(ElementLockGraceMs);
+                }
+                else
+                {
+                    _snapIntentMode = SnapIntentMode.ElementProbe;
+                }
+            }
+            else
+            {
+                _snapIntentMode = SnapIntentMode.ElementProbe;
             }
 
             if (!_elementSnapHoverTimer.IsEnabled)
@@ -455,6 +503,11 @@ namespace PathSnip
             _elementSnapHoverTimer.Stop();
 
             if (_selectionSession.IsSelecting || _selectionCompleted)
+            {
+                return;
+            }
+
+            if (IsFastPointerMotion())
             {
                 return;
             }
@@ -497,6 +550,8 @@ namespace PathSnip
                 }
 
                 _currentSnapResult = upgradedSnap;
+                _snapIntentMode = SnapIntentMode.ElementLock;
+                _elementLockUntil = DateTime.Now.AddMilliseconds(ElementLockGraceMs);
                 ApplySnapHighlight(_currentSnapResult);
             }
             finally
@@ -540,6 +595,8 @@ namespace PathSnip
         {
             _elementSnapHoverTimer.Stop();
             CancelElementSnapRequest();
+            _snapIntentMode = SnapIntentMode.WindowLock;
+            _elementLockUntil = DateTime.MinValue;
         }
 
         private void CancelElementSnapRequest()
@@ -1366,6 +1423,7 @@ namespace PathSnip
             StopElementSnapUpgrade();
             _selectionSession.Reset();
             _currentSnapResult = SnapResult.None;
+            _snapIntentMode = SnapIntentMode.WindowLock;
             SelectionRect.Visibility = Visibility.Collapsed;
             SizeLabel.Visibility = Visibility.Collapsed;
             OuterMask.Visibility = Visibility.Collapsed;
@@ -1376,6 +1434,72 @@ namespace PathSnip
             HideResizeAnchors();
 
             CaptureCancelled?.Invoke();
+        }
+
+        private void UpdatePointerMotion(Point cursorScreenPoint, DateTime now)
+        {
+            if (_lastPointerMoveAt != DateTime.MinValue)
+            {
+                double elapsedMs = (now - _lastPointerMoveAt).TotalMilliseconds;
+                if (elapsedMs > 0)
+                {
+                    double dx = cursorScreenPoint.X - _lastPointerScreenPoint.X;
+                    double dy = cursorScreenPoint.Y - _lastPointerScreenPoint.Y;
+                    double distance = Math.Sqrt(dx * dx + dy * dy);
+                    _pointerSpeedPxPerSecond = distance * 1000 / elapsedMs;
+                }
+            }
+
+            _lastPointerMoveAt = now;
+            _lastPointerScreenPoint = cursorScreenPoint;
+        }
+
+        private bool IsFastPointerMotion()
+        {
+            return _pointerSpeedPxPerSecond >= FastPointerSpeedThreshold;
+        }
+
+        private bool ShouldKeepElementLock(Point cursorScreenPoint, DateTime now)
+        {
+            if (_currentSnapResult.Kind != SnapKind.Element || !_currentSnapResult.Bounds.HasValue)
+            {
+                return false;
+            }
+
+            Rect bounds = _currentSnapResult.Bounds.Value;
+            Rect toleratedBounds = bounds;
+            toleratedBounds.Inflate(ElementExitTolerancePx, ElementExitTolerancePx);
+
+            if (toleratedBounds.Contains(cursorScreenPoint))
+            {
+                _snapIntentMode = SnapIntentMode.ElementLock;
+                _elementLockUntil = now.AddMilliseconds(ElementLockGraceMs);
+                return true;
+            }
+
+            if (_snapIntentMode == SnapIntentMode.ElementLock && now <= _elementLockUntil)
+            {
+                return true;
+            }
+
+            return false;
+        }
+
+        private static bool IsSameWindow(SnapResult left, SnapResult right)
+        {
+            if (!left.WindowHandle.HasValue || !right.WindowHandle.HasValue)
+            {
+                return false;
+            }
+
+            IntPtr leftHandle = left.WindowHandle.Value;
+            IntPtr rightHandle = right.WindowHandle.Value;
+            if (leftHandle == IntPtr.Zero || rightHandle == IntPtr.Zero)
+            {
+                return false;
+            }
+
+            return leftHandle == rightHandle;
         }
 
         private void HideFinalizeChrome()
