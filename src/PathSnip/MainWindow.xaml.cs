@@ -11,6 +11,9 @@ namespace PathSnip
     public partial class MainWindow : Window
     {
         private const int CaptureDebounceWindowMs = 300;
+        private static readonly int[] UiFallbackPathRetryDelaysMs = { 120, 250, 500, 1000, 1500 };
+        private static readonly int[] UiFallbackImageRetryDelaysMs = { 120, 300 };
+        private static readonly int[] UiFallbackImageAndPathRetryDelaysMs = { 120, 250, 500, 1000, 2000 };
         private CaptureOverlayWindow _captureWindow;
         private HotkeyService _hotkeyService;
         private bool _isCapturing;
@@ -187,12 +190,6 @@ namespace PathSnip
                 var config = ConfigService.Instance;
                 StartClipboardWriteAfterSave(bitmap, filePath, config.ClipboardMode, config.PathFormat, config.ShowNotification, operationId, isCompositeCapture: false);
 
-                // 根据配置决定是否显示通知
-                if (config.ShowNotification)
-                {
-                    TrayIcon.ShowBalloonTip("PathSnip", "已保存", Hardcodet.Wpf.TaskbarNotification.BalloonIcon.Info);
-                }
-
                 stopwatch.Stop();
                 LogService.LogInfo("capture.region.completed", $"elapsedMs={stopwatch.ElapsedMilliseconds}", operationId, "capture.done");
             }
@@ -231,11 +228,6 @@ namespace PathSnip
 
                 var config = ConfigService.Instance;
                 StartClipboardWriteAfterSave(bitmap, filePath, config.ClipboardMode, config.PathFormat, config.ShowNotification, operationId, isCompositeCapture: true);
-
-                if (config.ShowNotification)
-                {
-                    TrayIcon.ShowBalloonTip("PathSnip", "已保存", Hardcodet.Wpf.TaskbarNotification.BalloonIcon.Info);
-                }
 
                 stopwatch.Stop();
                 LogService.LogInfo("capture.composite.completed", $"elapsedMs={stopwatch.ElapsedMilliseconds}", operationId, "capture.done");
@@ -293,6 +285,7 @@ namespace PathSnip
             try
             {
                 bool copied;
+                string successMessage;
                 string failedMessage;
                 string stage;
 
@@ -300,19 +293,22 @@ namespace PathSnip
                 {
                     case ClipboardMode.ImageOnly:
                         copied = await ClipboardService.TrySetImageAsync(bitmap, operationId);
-                        failedMessage = "已保存，但复制图片失败";
+                        successMessage = "已保存，图片已复制";
+                        failedMessage = "复制图片失败（文件已保存，可能被其他程序占用）";
                         stage = "clipboard.image";
                         break;
                     case ClipboardMode.ImageAndPath:
                         var formattedPathForImageAndPath = ClipboardService.FormatPath(filePath, pathFormat);
                         copied = await ClipboardService.TrySetImageAndPathAsync(bitmap, formattedPathForImageAndPath, operationId);
-                        failedMessage = "已保存，但复制图片和路径失败";
+                        successMessage = "已保存，图片和路径已复制";
+                        failedMessage = "复制图片和路径失败（文件已保存，可能被其他程序占用）";
                         stage = "clipboard.image_path";
                         break;
                     default:
                         var formattedPath = ClipboardService.FormatPath(filePath, pathFormat);
                         copied = await ClipboardService.TrySetTextAsync(formattedPath, operationId);
-                        failedMessage = "已保存，但复制路径失败";
+                        successMessage = "已保存，路径已复制";
+                        failedMessage = "复制路径失败（文件已保存，可能被其他程序占用）";
                         stage = "clipboard.path";
                         break;
                 }
@@ -321,7 +317,71 @@ namespace PathSnip
                 if (copied)
                 {
                     LogService.LogInfo("capture.clipboard.completed", $"elapsedMs={clipboardWatch.ElapsedMilliseconds}", operationId, stage);
+
+                    if (showNotification)
+                    {
+                        _ = Dispatcher.BeginInvoke(new Action(() =>
+                        {
+                            TrayIcon.ShowBalloonTip("PathSnip", successMessage, Hardcodet.Wpf.TaskbarNotification.BalloonIcon.Info);
+                        }));
+                    }
+
                     return;
+                }
+
+                bool uiFallbackCopied = await TryClipboardWriteOnUiThreadWithRetryAsync(
+                    clipboardMode,
+                    bitmap,
+                    filePath,
+                    pathFormat,
+                    operationId,
+                    stage);
+                if (uiFallbackCopied)
+                {
+                    LogService.LogWarn("capture.clipboard.ui_fallback_recovered", $"elapsedMs={clipboardWatch.ElapsedMilliseconds}", operationId, stage);
+
+                    if (showNotification)
+                    {
+                        _ = Dispatcher.BeginInvoke(new Action(() =>
+                        {
+                            TrayIcon.ShowBalloonTip("PathSnip", successMessage, Hardcodet.Wpf.TaskbarNotification.BalloonIcon.Info);
+                        }));
+                    }
+
+                    return;
+                }
+
+                if (clipboardMode == ClipboardMode.ImageAndPath)
+                {
+                    bool imageOnlyRecovered = await TryClipboardWriteOnUiThreadWithRetryAsync(
+                        ClipboardMode.ImageOnly,
+                        bitmap,
+                        filePath,
+                        pathFormat,
+                        operationId,
+                        "clipboard.image_path.partial_image");
+
+                    if (imageOnlyRecovered)
+                    {
+                        LogService.LogWarn(
+                            "capture.clipboard.partial_recovered",
+                            $"elapsedMs={clipboardWatch.ElapsedMilliseconds} recovered=image_only",
+                            operationId,
+                            stage);
+
+                        if (showNotification)
+                        {
+                            _ = Dispatcher.BeginInvoke(new Action(() =>
+                            {
+                                TrayIcon.ShowBalloonTip(
+                                    "PathSnip",
+                                    "图片已复制，路径复制失败（文件已保存，可能被其他程序占用）",
+                                    Hardcodet.Wpf.TaskbarNotification.BalloonIcon.Warning);
+                            }));
+                        }
+
+                        return;
+                    }
                 }
 
                 LogService.LogWarn("capture.clipboard.failed", $"elapsedMs={clipboardWatch.ElapsedMilliseconds}", operationId, stage);
@@ -338,6 +398,88 @@ namespace PathSnip
                 clipboardWatch.Stop();
                 string stage = isCompositeCapture ? "clipboard.composite" : "clipboard.region";
                 LogService.LogException("capture.clipboard.unexpected_error", ex, $"elapsedMs={clipboardWatch.ElapsedMilliseconds}", operationId, stage);
+
+                if (showNotification)
+                {
+                    _ = Dispatcher.BeginInvoke(new Action(() =>
+                    {
+                        TrayIcon.ShowBalloonTip("PathSnip", "写入剪贴板异常（文件已保存）", Hardcodet.Wpf.TaskbarNotification.BalloonIcon.Warning);
+                    }));
+                }
+            }
+        }
+
+        private async Task<bool> TryClipboardWriteOnUiThreadWithRetryAsync(
+            ClipboardMode clipboardMode,
+            System.Windows.Media.Imaging.BitmapSource bitmap,
+            string filePath,
+            string pathFormat,
+            string operationId,
+            string stage)
+        {
+            int[] retryDelays = GetUiFallbackRetryDelays(clipboardMode);
+
+            for (int attempt = 0; attempt <= retryDelays.Length; attempt++)
+            {
+                bool copied = await Dispatcher.InvokeAsync(() =>
+                    TryClipboardWriteOnUiThread(clipboardMode, bitmap, filePath, pathFormat, operationId));
+
+                if (copied)
+                {
+                    return true;
+                }
+
+                if (attempt >= retryDelays.Length)
+                {
+                    break;
+                }
+
+                int delayMs = retryDelays[attempt];
+                LogService.LogWarn(
+                    "capture.clipboard.ui_fallback_retry",
+                    $"attempt={attempt + 1} delayMs={delayMs}",
+                    operationId,
+                    stage);
+
+                await Task.Delay(delayMs);
+            }
+
+            return false;
+        }
+
+        private static int[] GetUiFallbackRetryDelays(ClipboardMode clipboardMode)
+        {
+            switch (clipboardMode)
+            {
+                case ClipboardMode.ImageOnly:
+                    return UiFallbackImageRetryDelaysMs;
+                case ClipboardMode.ImageAndPath:
+                    return UiFallbackImageAndPathRetryDelaysMs;
+                default:
+                    return UiFallbackPathRetryDelaysMs;
+            }
+        }
+
+        private static bool TryClipboardWriteOnUiThread(
+            ClipboardMode clipboardMode,
+            System.Windows.Media.Imaging.BitmapSource bitmap,
+            string filePath,
+            string pathFormat,
+            string operationId)
+        {
+            switch (clipboardMode)
+            {
+                case ClipboardMode.ImageOnly:
+                    return ClipboardService.TrySetImageOnCurrentThreadOnce(bitmap, operationId);
+                case ClipboardMode.ImageAndPath:
+                    return ClipboardService.TrySetImageAndPathOnCurrentThreadOnce(
+                        bitmap,
+                        ClipboardService.FormatPath(filePath, pathFormat),
+                        operationId);
+                default:
+                    return ClipboardService.TrySetTextOnCurrentThreadOnce(
+                        ClipboardService.FormatPath(filePath, pathFormat),
+                        operationId);
             }
         }
 
