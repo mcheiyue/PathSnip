@@ -2,6 +2,28 @@
 
 All notable changes to this project will be documented in this file.
 
+## [v1.1.6] - 2026-03-08
+
+> **[SYS_MSG]** 完成 Overlay 结构拆解并增强剪贴板三模式稳定性，统一通知反馈与兜底恢复链路，为 v1.1.7 智能吸附引擎接入建立稳定边界。
+> **[METRICS]** Binary: <1MB
+
+### 💻 终端与工作流
+* **[工作流]** 剪贴板链路补齐分阶段结构化日志（worker 重试 / UI fallback 重试 / 部分恢复），提升现场排障效率。
+
+### ✨ 新特性
+* **[Core]** 新增吸附与 Overlay 拆解边界：`SnapResult`、`ISnapService`、`WindowSnapService`、`SelectionSession(M4-1)`、`SelectionBitmapComposer`、`OverlayShortcutHandler`。
+* **[Core]** `CaptureOverlayWindow` 完成边界接入，窗口吸附、快捷键解析、位图合成职责分离。
+
+### 🐛 问题修复
+* `[Core]` **路径模式剪贴板写入不稳定** - 增强重试与兜底策略，提升路径写入成功率。
+* `[Core]` **图片+路径模式恢复率偏低** - 增强组合写入与恢复策略，失败时优先保障图片可用并明确提示路径失败。
+* `[UI]` **通知文案与时序误导** - 按剪贴板模式输出明确结果，避免“已保存”与复制失败提示混淆。
+* `[Perf]` **仅图片模式等待偏长** - 调整图片写入重试策略，缩短冲突场景进入兜底的等待时间。
+
+### ⚙️ 优化与重构
+* `[Core]` **Overlay 主文件解耦** - 在不打穿右键分级取消、resize 锚点、工具栏时序前提下完成低风险拆解。
+* `[Core]` **v1.1.7 前置契约收敛** - 固化智能吸附引擎接入点，避免后续重写边界。
+
 ## [v1.1.5] - 2026-03-07
 
 > **[SYS_MSG]** 完成文件写入原子化、防抖与状态兜底、日志历史清理，并新增荧光笔与贴图合成一致性优化。
