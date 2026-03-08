@@ -23,6 +23,15 @@ namespace PathSnip.Services.Snap
                 return SnapResult.None;
             }
 
+            if (!_stableResult.IsValid || !_stableResult.Bounds.HasValue)
+            {
+                _stableResult = candidate;
+                _pendingResult = SnapResult.None;
+                _pendingHits = 0;
+                _lastSwitchAt = now;
+                return _stableResult;
+            }
+
             if (_stableResult.IsValid && _stableResult.Bounds.HasValue && IsSimilar(_stableResult, candidate))
             {
                 _stableResult = candidate;

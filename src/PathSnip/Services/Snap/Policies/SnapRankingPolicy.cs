@@ -5,7 +5,7 @@ namespace PathSnip.Services.Snap
 {
     public sealed class SnapRankingPolicy
     {
-        private const double MinAcceptDelta = 5;
+        private const double MinAcceptDelta = 0;
 
         public bool ShouldUseElement(
             SnapResult windowSnap,
@@ -21,6 +21,16 @@ namespace PathSnip.Services.Snap
             if (!elementSnap.IsValid || !elementSnap.Bounds.HasValue)
             {
                 return false;
+            }
+
+            Rect windowBounds = windowSnap.Bounds.Value;
+            Rect elementBounds = elementSnap.Bounds.Value;
+            double windowArea = Math.Max(1, windowBounds.Width * windowBounds.Height);
+            double elementArea = Math.Max(1, elementBounds.Width * elementBounds.Height);
+            double areaRatio = elementArea / windowArea;
+            if (elementBounds.Contains(cursorPoint) && areaRatio >= 0.01 && areaRatio <= 0.9)
+            {
+                return true;
             }
 
             double elementScore = ScoreElement(windowSnap, elementSnap, cursorPoint, lastAcceptedElement);
@@ -73,8 +83,8 @@ namespace PathSnip.Services.Snap
         private static double ScoreWindow(SnapResult windowSnap, Point cursorPoint)
         {
             Rect windowBounds = windowSnap.Bounds.Value;
-            double baseScore = 40;
-            double cursorFitWeight = windowBounds.Contains(cursorPoint) ? 12 : 0;
+            double baseScore = 34;
+            double cursorFitWeight = windowBounds.Contains(cursorPoint) ? 8 : 0;
             return baseScore + cursorFitWeight;
         }
 

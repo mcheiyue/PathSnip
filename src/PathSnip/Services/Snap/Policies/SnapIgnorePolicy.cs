@@ -6,7 +6,7 @@ namespace PathSnip.Services.Snap
     public sealed class SnapIgnorePolicy
     {
         private const double MinElementSize = 8;
-        private const double MaxElementAreaRatio = 0.95;
+        private const double MaxElementAreaRatio = 0.9;
 
         public bool ShouldIgnore(SnapResult windowSnap, SnapResult candidate)
         {
