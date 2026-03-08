@@ -34,6 +34,12 @@ namespace PathSnip.Services.Snap
         {
             cancellationToken.ThrowIfCancellationRequested();
 
+            Rect logicalWindowBounds = currentSnap.Bounds.Value;
+            if (!TryBuildCoordinateContext(currentSnap, screenPoint, out POINT point, out Rect physicalWindowBounds, out double scaleX, out double scaleY))
+            {
+                return SnapResult.None;
+            }
+
             IntPtr hwnd = currentSnap.WindowHandle.GetValueOrDefault(IntPtr.Zero);
             if (hwnd == IntPtr.Zero)
             {
@@ -44,12 +50,6 @@ namespace PathSnip.Services.Snap
             {
                 return SnapResult.None;
             }
-
-            var point = new POINT
-            {
-                X = (int)screenPoint.X,
-                Y = (int)screenPoint.Y
-            };
 
             IAccessible accessible;
             object child;
@@ -77,24 +77,24 @@ namespace PathSnip.Services.Snap
                 return SnapResult.None;
             }
 
-            if (!bounds.Contains(screenPoint))
+            if (!bounds.Contains(new Point(point.X, point.Y)))
             {
                 return SnapResult.None;
             }
 
-            Rect windowBounds = currentSnap.Bounds.Value;
-            if (!windowBounds.IntersectsWith(bounds))
+            if (!physicalWindowBounds.IntersectsWith(bounds))
             {
                 return SnapResult.None;
             }
 
-            if (!IsElementBoundsInsideWindow(bounds, windowBounds))
+            if (!IsElementBoundsInsideWindow(bounds, physicalWindowBounds))
             {
                 return SnapResult.None;
             }
 
             string label = GetAccessibleName(target, targetChild);
-            return new SnapResult(bounds, label, true, SnapKind.Element, SnapSource.MSAA, 0.8, hwnd);
+            Rect logicalBounds = ConvertToLogicalBounds(bounds, physicalWindowBounds, logicalWindowBounds, scaleX, scaleY);
+            return new SnapResult(logicalBounds, label, true, SnapKind.Element, SnapSource.MSAA, 0.8, hwnd);
         }
 
         private static bool IsElementBoundsInsideWindow(Rect elementBounds, Rect windowBounds)
@@ -278,5 +278,89 @@ namespace PathSnip.Services.Snap
 
         [DllImport("user32.dll")]
         private static extern uint GetWindowThreadProcessId(IntPtr hWnd, out uint lpdwProcessId);
+
+        [DllImport("user32.dll")]
+        private static extern bool GetWindowRect(IntPtr hWnd, out RECT lpRect);
+
+        [StructLayout(LayoutKind.Sequential)]
+        private struct RECT
+        {
+            public int Left;
+            public int Top;
+            public int Right;
+            public int Bottom;
+        }
+
+        private static bool TryBuildCoordinateContext(
+            SnapResult currentSnap,
+            Point logicalPoint,
+            out POINT physicalPoint,
+            out Rect physicalWindowBounds,
+            out double scaleX,
+            out double scaleY)
+        {
+            Rect logicalWindowBounds = currentSnap.Bounds.GetValueOrDefault(Rect.Empty);
+            scaleX = 1;
+            scaleY = 1;
+
+            IntPtr hwnd = currentSnap.WindowHandle.GetValueOrDefault(IntPtr.Zero);
+            RECT rawRect;
+            if (hwnd != IntPtr.Zero && GetWindowRect(hwnd, out rawRect))
+            {
+                physicalWindowBounds = new Rect(rawRect.Left, rawRect.Top, Math.Max(1, rawRect.Right - rawRect.Left), Math.Max(1, rawRect.Bottom - rawRect.Top));
+
+                if (!logicalWindowBounds.IsEmpty && logicalWindowBounds.Width > 0 && logicalWindowBounds.Height > 0)
+                {
+                    scaleX = physicalWindowBounds.Width / logicalWindowBounds.Width;
+                    scaleY = physicalWindowBounds.Height / logicalWindowBounds.Height;
+                }
+
+                if (scaleX <= 0 || scaleX > 4)
+                {
+                    scaleX = 1;
+                }
+
+                if (scaleY <= 0 || scaleY > 4)
+                {
+                    scaleY = 1;
+                }
+
+                Point mappedPoint = logicalWindowBounds.IsEmpty
+                    ? logicalPoint
+                    : new Point(
+                        physicalWindowBounds.Left + (logicalPoint.X - logicalWindowBounds.Left) * scaleX,
+                        physicalWindowBounds.Top + (logicalPoint.Y - logicalWindowBounds.Top) * scaleY);
+
+                physicalPoint = new POINT
+                {
+                    X = (int)Math.Round(mappedPoint.X),
+                    Y = (int)Math.Round(mappedPoint.Y)
+                };
+
+                return true;
+            }
+
+            physicalPoint = new POINT
+            {
+                X = (int)Math.Round(logicalPoint.X),
+                Y = (int)Math.Round(logicalPoint.Y)
+            };
+            physicalWindowBounds = logicalWindowBounds;
+            return !physicalWindowBounds.IsEmpty;
+        }
+
+        private static Rect ConvertToLogicalBounds(Rect physicalBounds, Rect physicalWindowBounds, Rect logicalWindowBounds, double scaleX, double scaleY)
+        {
+            if (logicalWindowBounds.IsEmpty || physicalWindowBounds.IsEmpty || scaleX <= 0 || scaleY <= 0)
+            {
+                return physicalBounds;
+            }
+
+            double left = logicalWindowBounds.Left + (physicalBounds.Left - physicalWindowBounds.Left) / scaleX;
+            double top = logicalWindowBounds.Top + (physicalBounds.Top - physicalWindowBounds.Top) / scaleY;
+            double width = physicalBounds.Width / scaleX;
+            double height = physicalBounds.Height / scaleY;
+            return new Rect(left, top, width, height);
+        }
     }
 }
