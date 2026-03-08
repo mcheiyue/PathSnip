@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Concurrent;
+using System.IO;
 using System.Threading;
 using System.Threading.Tasks;
 using System.Windows;
@@ -26,6 +27,10 @@ namespace PathSnip.Services
         }
 
         private const int ClipboardCantOpenHResult = unchecked((int)0x800401D0);
+        private const int WinFormsTextRetryTimes = 12;
+        private const int WinFormsTextRetryDelayMs = 120;
+        private const int WinFormsImageAndPathRetryTimes = 15;
+        private const int WinFormsImageAndPathRetryDelayMs = 120;
         private static readonly int[] FastRetryDelaysMs = { 50, 120, 250 };
         private static readonly int[] SlowCantOpenRetryDelaysMs = { 1000, 2000, 5000 };
         private const int ClipboardQueueCapacity = 512;
@@ -72,6 +77,78 @@ namespace PathSnip.Services
             }
             var safeBitmap = CloneFrozenBitmap(bitmap);
             return RunStaClipboardActionAsync(() => SetImageAndPath(safeBitmap, path, operationId), operationId, "image+path");
+        }
+
+        public static bool TrySetTextOnCurrentThreadOnce(string text, string operationId = null)
+        {
+            if (string.IsNullOrWhiteSpace(operationId))
+            {
+                operationId = LogService.CreateOperationId("clip");
+            }
+
+            try
+            {
+                WriteTextWithWinFormsRetry(text);
+                LogService.LogInfo(
+                    "clipboard.set_text.ui_fallback.success",
+                    $"textLength={text?.Length ?? 0} api=winforms retryTimes={WinFormsTextRetryTimes} retryDelayMs={WinFormsTextRetryDelayMs}",
+                    operationId,
+                    "clipboard.ui_fallback");
+                return true;
+            }
+            catch (Exception ex)
+            {
+                LogService.LogException("clipboard.set_text.ui_fallback.failed", ex, $"textLength={text?.Length ?? 0}", operationId, "clipboard.ui_fallback");
+                return false;
+            }
+        }
+
+        public static bool TrySetImageOnCurrentThreadOnce(BitmapSource bitmap, string operationId = null)
+        {
+            if (string.IsNullOrWhiteSpace(operationId))
+            {
+                operationId = LogService.CreateOperationId("clip");
+            }
+
+            try
+            {
+                var safeBitmap = CloneFrozenBitmap(bitmap);
+                var dataObject = new DataObject();
+                dataObject.SetData(DataFormats.Bitmap, safeBitmap);
+                Clipboard.SetDataObject(dataObject, true);
+                LogService.LogInfo("clipboard.set_image.ui_fallback.success", $"pixel={safeBitmap?.PixelWidth ?? 0}x{safeBitmap?.PixelHeight ?? 0}", operationId, "clipboard.ui_fallback");
+                return true;
+            }
+            catch (Exception ex)
+            {
+                LogService.LogException("clipboard.set_image.ui_fallback.failed", ex, $"pixel={bitmap?.PixelWidth ?? 0}x{bitmap?.PixelHeight ?? 0}", operationId, "clipboard.ui_fallback");
+                return false;
+            }
+        }
+
+        public static bool TrySetImageAndPathOnCurrentThreadOnce(BitmapSource bitmap, string path, string operationId = null)
+        {
+            if (string.IsNullOrWhiteSpace(operationId))
+            {
+                operationId = LogService.CreateOperationId("clip");
+            }
+
+            try
+            {
+                var safeBitmap = CloneFrozenBitmap(bitmap);
+                WriteImageAndPathWithWinFormsRetry(safeBitmap, path);
+                LogService.LogInfo(
+                    "clipboard.set_image_path.ui_fallback.success",
+                    $"pixel={safeBitmap?.PixelWidth ?? 0}x{safeBitmap?.PixelHeight ?? 0} pathLength={path?.Length ?? 0} api=winforms retryTimes={WinFormsImageAndPathRetryTimes} retryDelayMs={WinFormsImageAndPathRetryDelayMs}",
+                    operationId,
+                    "clipboard.ui_fallback");
+                return true;
+            }
+            catch (Exception ex)
+            {
+                LogService.LogException("clipboard.set_image_path.ui_fallback.failed", ex, $"pixel={bitmap?.PixelWidth ?? 0}x{bitmap?.PixelHeight ?? 0} pathLength={path?.Length ?? 0}", operationId, "clipboard.ui_fallback");
+                return false;
+            }
         }
 
         private static BitmapSource CloneFrozenBitmap(BitmapSource bitmap)
@@ -135,10 +212,17 @@ namespace PathSnip.Services
                 "clipboard.set_text.failed",
                 () =>
                 {
-                    var dataObject = new DataObject();
-                    dataObject.SetData(DataFormats.Text, text);
-                    Clipboard.SetDataObject(dataObject, true);
+                    WriteTextWithWinFormsRetry(text);
                 });
+        }
+
+        private static void WriteTextWithWinFormsRetry(string text)
+        {
+            System.Windows.Forms.Clipboard.SetDataObject(
+                text,
+                true,
+                WinFormsTextRetryTimes,
+                WinFormsTextRetryDelayMs);
         }
 
         private static void SetImage(BitmapSource bitmap, string operationId)
@@ -154,7 +238,8 @@ namespace PathSnip.Services
                     var dataObject = new DataObject();
                     dataObject.SetData(DataFormats.Bitmap, bitmap);
                     Clipboard.SetDataObject(dataObject, true);
-                });
+                },
+                allowSlowCantOpenRetry: false);
         }
 
         private static void SetImageAndPath(BitmapSource bitmap, string path, string operationId)
@@ -167,11 +252,49 @@ namespace PathSnip.Services
                 "clipboard.set_image_path.failed",
                 () =>
                 {
-                    var dataObject = new DataObject();
-                    dataObject.SetData(DataFormats.Bitmap, bitmap);
-                    dataObject.SetData(DataFormats.Text, path);
-                    Clipboard.SetDataObject(dataObject, true);
+                    WriteImageAndPathWithWinFormsRetry(bitmap, path);
                 });
+        }
+
+        private static void WriteImageAndPathWithWinFormsRetry(BitmapSource bitmap, string path)
+        {
+            using (var drawingBitmap = ConvertToDrawingBitmap(bitmap))
+            {
+                var dataObject = new System.Windows.Forms.DataObject();
+                dataObject.SetData(System.Windows.Forms.DataFormats.Bitmap, true, drawingBitmap);
+
+                string safePath = path ?? string.Empty;
+                dataObject.SetData(System.Windows.Forms.DataFormats.UnicodeText, safePath);
+                dataObject.SetData(System.Windows.Forms.DataFormats.Text, safePath);
+
+                System.Windows.Forms.Clipboard.SetDataObject(
+                    dataObject,
+                    true,
+                    WinFormsImageAndPathRetryTimes,
+                    WinFormsImageAndPathRetryDelayMs);
+            }
+        }
+
+        private static System.Drawing.Bitmap ConvertToDrawingBitmap(BitmapSource bitmap)
+        {
+            var safeBitmap = CloneFrozenBitmap(bitmap);
+            if (safeBitmap == null)
+            {
+                throw new ArgumentNullException(nameof(bitmap));
+            }
+
+            using (var memoryStream = new MemoryStream())
+            {
+                var encoder = new BmpBitmapEncoder();
+                encoder.Frames.Add(BitmapFrame.Create(safeBitmap));
+                encoder.Save(memoryStream);
+                memoryStream.Position = 0;
+
+                using (var tempBitmap = new System.Drawing.Bitmap(memoryStream))
+                {
+                    return new System.Drawing.Bitmap(tempBitmap);
+                }
+            }
         }
 
         private static void ExecuteClipboardWrite(
@@ -180,7 +303,8 @@ namespace PathSnip.Services
             string successMessage,
             string retryEvent,
             string failEvent,
-            Action writeAction)
+            Action writeAction,
+            bool allowSlowCantOpenRetry = true)
         {
             int attempt = 0;
 
@@ -194,7 +318,7 @@ namespace PathSnip.Services
                 }
                 catch (Exception ex)
                 {
-                    if (!TryGetRetryDelay(ex, attempt, out int delayMs, out string phase))
+                    if (!TryGetRetryDelay(ex, attempt, allowSlowCantOpenRetry, out int delayMs, out string phase))
                     {
                         LogService.LogException(failEvent, ex, $"attempt={attempt + 1}", operationId, "clipboard.write");
                         throw;
@@ -208,7 +332,7 @@ namespace PathSnip.Services
             }
         }
 
-        private static bool TryGetRetryDelay(Exception ex, int attempt, out int delayMs, out string phase)
+        private static bool TryGetRetryDelay(Exception ex, int attempt, bool allowSlowCantOpenRetry, out int delayMs, out string phase)
         {
             if (attempt < FastRetryDelaysMs.Length)
             {
@@ -217,7 +341,7 @@ namespace PathSnip.Services
                 return true;
             }
 
-            if (IsClipboardCantOpen(ex))
+            if (allowSlowCantOpenRetry && IsClipboardCantOpen(ex))
             {
                 int slowRetryIndex = attempt - FastRetryDelaysMs.Length;
                 if (slowRetryIndex < SlowCantOpenRetryDelaysMs.Length)
