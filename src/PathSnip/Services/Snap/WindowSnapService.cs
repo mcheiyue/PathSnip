@@ -1,4 +1,5 @@
 using System.Windows;
+using PathSnip.Services;
 
 namespace PathSnip.Services.Snap
 {
@@ -6,13 +7,13 @@ namespace PathSnip.Services.Snap
     {
         public SnapResult GetCurrentSnap(Point screenPoint, int currentProcessId)
         {
-            Rect? windowRect = WindowDetectionService.GetWindowUnderCursor(screenPoint, currentProcessId);
-            if (!windowRect.HasValue)
+            WindowTarget? windowTarget = WindowDetectionService.GetWindowTargetUnderCursor(screenPoint, currentProcessId);
+            if (!windowTarget.HasValue)
             {
                 return SnapResult.None;
             }
 
-            return SnapResult.FromWindow(windowRect.Value);
+            return SnapResult.FromWindow(windowTarget.Value.Bounds, windowHandle: windowTarget.Value.Hwnd);
         }
     }
 }

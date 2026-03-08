@@ -84,13 +84,7 @@ namespace PathSnip.Services
 
         #region 公共方法
 
-        /// <summary>
-        /// 获取当前鼠标位置的窗口边界（逻辑像素坐标）
-        /// </summary>
-        /// <param name="mousePosition">鼠标在虚拟屏幕上的逻辑坐标</param>
-        /// <param name="excludeProcessId">要排除的进程ID（通常为当前程序）</param>
-        /// <returns>窗口边界矩形，如未检测到则返回 null</returns>
-        public static Rect? GetWindowUnderCursor(Point mousePosition, int excludeProcessId)
+        public static WindowTarget? GetWindowTargetUnderCursor(Point mousePosition, int excludeProcessId)
         {
             var dpiInfo = GetDpiScale();
             var point = new POINT
@@ -99,60 +93,86 @@ namespace PathSnip.Services
                 Y = (int)(mousePosition.Y * dpiInfo.ScaleY)
             };
 
+            IntPtr hWnd;
             RECT bounds;
-            if (!TryGetWindowByPoint(point, excludeProcessId, out bounds) &&
-                !TryGetWindowByEnum(point, excludeProcessId, out bounds))
+            if (!TryGetWindowByPoint(point, excludeProcessId, out hWnd, out bounds) &&
+                !TryGetWindowByEnum(point, excludeProcessId, out hWnd, out bounds))
             {
                 return null;
             }
 
-            return new Rect(
+            var logicalBounds = new Rect(
                 bounds.Left / dpiInfo.ScaleX,
                 bounds.Top / dpiInfo.ScaleY,
                 (bounds.Right - bounds.Left) / dpiInfo.ScaleX,
                 (bounds.Bottom - bounds.Top) / dpiInfo.ScaleY);
+
+            return new WindowTarget(hWnd, logicalBounds);
         }
 
-        private static bool TryGetWindowByPoint(POINT point, int excludeProcessId, out RECT bounds)
+        /// <summary>
+        /// 获取当前鼠标位置的窗口边界（逻辑像素坐标）
+        /// </summary>
+        /// <param name="mousePosition">鼠标在虚拟屏幕上的逻辑坐标</param>
+        /// <param name="excludeProcessId">要排除的进程ID（通常为当前程序）</param>
+        /// <returns>窗口边界矩形，如未检测到则返回 null</returns>
+        public static Rect? GetWindowUnderCursor(Point mousePosition, int excludeProcessId)
         {
+            WindowTarget? windowTarget = GetWindowTargetUnderCursor(mousePosition, excludeProcessId);
+            if (!windowTarget.HasValue)
+            {
+                return null;
+            }
+
+            return windowTarget.Value.Bounds;
+        }
+
+        private static bool TryGetWindowByPoint(POINT point, int excludeProcessId, out IntPtr hWnd, out RECT bounds)
+        {
+            hWnd = IntPtr.Zero;
             bounds = default(RECT);
 
-            IntPtr hWnd = WindowFromPoint(point);
-            if (hWnd == IntPtr.Zero)
+            IntPtr targetWindow = WindowFromPoint(point);
+            if (targetWindow == IntPtr.Zero)
                 return false;
 
-            hWnd = GetAncestor(hWnd, GA_ROOT);
-            if (hWnd == IntPtr.Zero)
+            targetWindow = GetAncestor(targetWindow, GA_ROOT);
+            if (targetWindow == IntPtr.Zero)
                 return false;
 
-            if (!IsValidWindowCandidate(hWnd, excludeProcessId))
+            if (!IsValidWindowCandidate(targetWindow, excludeProcessId))
                 return false;
 
-            if (!TryGetWindowBounds(hWnd, out bounds))
+            if (!TryGetWindowBounds(targetWindow, out bounds))
                 return false;
 
-            return IsPointInRect(point, bounds);
+            if (!IsPointInRect(point, bounds))
+                return false;
+
+            hWnd = targetWindow;
+            return true;
         }
 
-        private static bool TryGetWindowByEnum(POINT point, int excludeProcessId, out RECT bounds)
+        private static bool TryGetWindowByEnum(POINT point, int excludeProcessId, out IntPtr hWnd, out RECT bounds)
         {
+            hWnd = IntPtr.Zero;
             bounds = default(RECT);
             IntPtr targetWindow = IntPtr.Zero;
             RECT targetBounds = default(RECT);
 
-            EnumWindows((hWnd, lParam) =>
+            EnumWindows((enumHwnd, lParam) =>
             {
-                if (!IsValidWindowCandidate(hWnd, excludeProcessId))
+                if (!IsValidWindowCandidate(enumHwnd, excludeProcessId))
                     return true;
 
                 RECT candidateBounds;
-                if (!TryGetWindowBounds(hWnd, out candidateBounds))
+                if (!TryGetWindowBounds(enumHwnd, out candidateBounds))
                     return true;
 
                 if (!IsPointInRect(point, candidateBounds))
                     return true;
 
-                targetWindow = hWnd;
+                targetWindow = enumHwnd;
                 targetBounds = candidateBounds;
                 return false;
             }, IntPtr.Zero);
@@ -160,6 +180,7 @@ namespace PathSnip.Services
             if (targetWindow == IntPtr.Zero)
                 return false;
 
+            hWnd = targetWindow;
             bounds = targetBounds;
             return true;
         }
@@ -246,6 +267,19 @@ namespace PathSnip.Services
         {
             ScaleX = scaleX;
             ScaleY = scaleY;
+        }
+    }
+
+    public struct WindowTarget
+    {
+        public IntPtr Hwnd { get; }
+
+        public Rect Bounds { get; }
+
+        public WindowTarget(IntPtr hwnd, Rect bounds)
+        {
+            Hwnd = hwnd;
+            Bounds = bounds;
         }
     }
 }
