@@ -9,6 +9,9 @@ namespace PathSnip.Services.Snap
 {
     public sealed class MsaaSnapProvider
     {
+        private static readonly Guid IAccessibleGuid = new Guid("618736E0-3C3D-11CF-810C-00AA00389B71");
+        private const uint ObjIdWindow = 0x00000000;
+        private const uint ObjIdClient = 0xFFFFFFFC;
         private const int ChildIdSelf = 0;
         private const double MinElementSize = 6;
         private const double WindowBoundsTolerance = 2;
@@ -53,10 +56,13 @@ namespace PathSnip.Services.Snap
 
             IAccessible accessible;
             object child;
-            int hr = AccessibleObjectFromPoint(point, out accessible, out child);
-            if (hr < 0 || accessible == null)
+            if (!TryGetWindowAccessible(hwnd, out accessible, out child))
             {
-                return SnapResult.None;
+                int hr = AccessibleObjectFromPoint(point, out accessible, out child);
+                if (hr < 0 || accessible == null)
+                {
+                    return SnapResult.None;
+                }
             }
 
             cancellationToken.ThrowIfCancellationRequested();
@@ -276,6 +282,9 @@ namespace PathSnip.Services.Snap
         [DllImport("oleacc.dll")]
         private static extern int AccessibleObjectFromPoint(POINT point, [MarshalAs(UnmanagedType.Interface)] out IAccessible accessible, [MarshalAs(UnmanagedType.Struct)] out object child);
 
+        [DllImport("oleacc.dll")]
+        private static extern int AccessibleObjectFromWindow(IntPtr hWnd, uint dwId, ref Guid riid, [MarshalAs(UnmanagedType.Interface)] out IAccessible ppvObject);
+
         [DllImport("user32.dll")]
         private static extern uint GetWindowThreadProcessId(IntPtr hWnd, out uint lpdwProcessId);
 
@@ -361,6 +370,27 @@ namespace PathSnip.Services.Snap
             double width = physicalBounds.Width / scaleX;
             double height = physicalBounds.Height / scaleY;
             return new Rect(left, top, width, height);
+        }
+
+        private static bool TryGetWindowAccessible(IntPtr hWnd, out IAccessible accessible, out object child)
+        {
+            child = ChildIdSelf;
+            Guid iid = IAccessibleGuid;
+
+            int hr = AccessibleObjectFromWindow(hWnd, ObjIdClient, ref iid, out accessible);
+            if (hr >= 0 && accessible != null)
+            {
+                return true;
+            }
+
+            hr = AccessibleObjectFromWindow(hWnd, ObjIdWindow, ref iid, out accessible);
+            if (hr >= 0 && accessible != null)
+            {
+                return true;
+            }
+
+            accessible = null;
+            return false;
         }
     }
 }

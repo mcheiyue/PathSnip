@@ -40,22 +40,43 @@ namespace PathSnip.Services.Snap
                 return SnapResult.None;
             }
 
-            AutomationElement element;
-            try
+            AutomationElement element = null;
+            IntPtr? currentWindowHandle = currentSnap.WindowHandle;
+            if (currentWindowHandle.HasValue && currentWindowHandle.Value != IntPtr.Zero)
             {
-                element = AutomationElement.FromPoint(physicalPoint);
+                try
+                {
+                    element = AutomationElement.FromHandle(currentWindowHandle.Value);
+                }
+                catch (ElementNotAvailableException)
+                {
+                }
+                catch (InvalidOperationException)
+                {
+                }
+                catch (COMException)
+                {
+                }
             }
-            catch (ElementNotAvailableException)
+
+            if (element == null)
             {
-                return SnapResult.None;
-            }
-            catch (InvalidOperationException)
-            {
-                return SnapResult.None;
-            }
-            catch (COMException)
-            {
-                return SnapResult.None;
+                try
+                {
+                    element = AutomationElement.FromPoint(physicalPoint);
+                }
+                catch (ElementNotAvailableException)
+                {
+                    return SnapResult.None;
+                }
+                catch (InvalidOperationException)
+                {
+                    return SnapResult.None;
+                }
+                catch (COMException)
+                {
+                    return SnapResult.None;
+                }
             }
 
             if (element == null)
@@ -132,15 +153,15 @@ namespace PathSnip.Services.Snap
             {
             }
 
-            IntPtr? windowHandle = currentSnap.WindowHandle;
-            if (!windowHandle.HasValue || windowHandle.Value == IntPtr.Zero)
+            IntPtr? resultWindowHandle = currentSnap.WindowHandle;
+            if (!resultWindowHandle.HasValue || resultWindowHandle.Value == IntPtr.Zero)
             {
                 try
                 {
                     int nativeHandle = element.Current.NativeWindowHandle;
                     if (nativeHandle != 0)
                     {
-                        windowHandle = new IntPtr(nativeHandle);
+                        resultWindowHandle = new IntPtr(nativeHandle);
                     }
                 }
                 catch (ElementNotAvailableException)
@@ -152,7 +173,7 @@ namespace PathSnip.Services.Snap
             }
 
             Rect logicalBounds = ConvertToLogicalBounds(bounds, physicalWindowBounds, logicalWindowBounds, scaleX, scaleY);
-            return new SnapResult(logicalBounds, label, true, SnapKind.Element, SnapSource.UIA, 0.85, windowHandle);
+            return new SnapResult(logicalBounds, label, true, SnapKind.Element, SnapSource.UIA, 0.85, resultWindowHandle);
         }
 
         private static AutomationElement ResolveDeepestElementAtPoint(AutomationElement rootElement, Point physicalPoint, CancellationToken cancellationToken)
