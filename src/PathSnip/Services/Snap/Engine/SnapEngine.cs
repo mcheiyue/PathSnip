@@ -13,7 +13,13 @@ namespace PathSnip.Services.Snap
         private readonly IReadOnlyList<ISnapProvider> _providers;
         private readonly UiaSnapProvider _uiaSnapProvider;
         private readonly MsaaSnapProvider _msaaSnapProvider;
+        private readonly SnapIgnorePolicy _ignorePolicy = new SnapIgnorePolicy();
+        private readonly SnapRankingPolicy _rankingPolicy = new SnapRankingPolicy();
+        private readonly SnapStabilizer _stabilizer = new SnapStabilizer();
+        private readonly object _policySync = new object();
         private long _requestVersion;
+        private Rect? _lastWindowBounds;
+        private SnapResult _lastAcceptedElement = SnapResult.None;
 
         public SnapEngine(IEnumerable<ISnapProvider> providers, UiaSnapProvider uiaSnapProvider = null, MsaaSnapProvider msaaSnapProvider = null)
         {
@@ -126,10 +132,47 @@ namespace PathSnip.Services.Snap
                     return SnapResult.None;
                 }
 
-                return snapResult;
+                SnapResult acceptedResult = ApplyPolicies(currentSnap, snapResult, screenPoint);
+                if (acceptedResult.IsValid)
+                {
+                    return acceptedResult;
+                }
             }
 
             return SnapResult.None;
+        }
+
+        private SnapResult ApplyPolicies(SnapResult windowSnap, SnapResult candidate, Point cursorPoint)
+        {
+            lock (_policySync)
+            {
+                if (HasWindowContextChanged(windowSnap))
+                {
+                    _stabilizer.Reset();
+                    _lastAcceptedElement = SnapResult.None;
+                }
+
+                _lastWindowBounds = windowSnap.Bounds;
+
+                if (_ignorePolicy.ShouldIgnore(windowSnap, candidate))
+                {
+                    return SnapResult.None;
+                }
+
+                if (!_rankingPolicy.ShouldUseElement(windowSnap, candidate, cursorPoint, _lastAcceptedElement))
+                {
+                    return SnapResult.None;
+                }
+
+                SnapResult stabilized = _stabilizer.Evaluate(candidate, DateTime.UtcNow);
+                if (!stabilized.IsValid)
+                {
+                    return SnapResult.None;
+                }
+
+                _lastAcceptedElement = stabilized;
+                return stabilized;
+            }
         }
 
         private static async Task<SnapResult> TryDetectWithTimeoutAsync(
@@ -226,5 +269,44 @@ namespace PathSnip.Services.Snap
 
         [DllImport("user32.dll")]
         private static extern uint GetWindowThreadProcessId(IntPtr hWnd, out uint lpdwProcessId);
+
+        private bool HasWindowContextChanged(SnapResult windowSnap)
+        {
+            if (!windowSnap.IsValid || !windowSnap.Bounds.HasValue)
+            {
+                return false;
+            }
+
+            if (!_lastWindowBounds.HasValue)
+            {
+                return false;
+            }
+
+            Rect previous = _lastWindowBounds.Value;
+            Rect current = windowSnap.Bounds.Value;
+
+            if (ComputeIou(previous, current) < 0.6)
+            {
+                return true;
+            }
+
+            return Math.Abs(previous.Left - current.Left) > 6
+                || Math.Abs(previous.Top - current.Top) > 6
+                || Math.Abs(previous.Width - current.Width) > 6
+                || Math.Abs(previous.Height - current.Height) > 6;
+        }
+
+        private static double ComputeIou(Rect a, Rect b)
+        {
+            Rect intersection = Rect.Intersect(a, b);
+            if (intersection.IsEmpty)
+            {
+                return 0;
+            }
+
+            double intersectionArea = Math.Max(0, intersection.Width * intersection.Height);
+            double unionArea = Math.Max(1, a.Width * a.Height + b.Width * b.Height - intersectionArea);
+            return intersectionArea / unionArea;
+        }
     }
 }
