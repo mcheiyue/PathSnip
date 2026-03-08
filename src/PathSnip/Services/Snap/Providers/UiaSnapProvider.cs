@@ -12,6 +12,7 @@ namespace PathSnip.Services.Snap
         private const double MinElementSize = 6;
         private const double WindowBoundsTolerance = 2;
         private const double MaxBoundsAreaScale = 1.02;
+        private const int MaxTraversalDepth = 8;
 
         public Task<SnapResult> GetCurrentSnapAsync(Point screenPoint, int currentProcessId, SnapResult currentSnap, CancellationToken cancellationToken)
         {
@@ -55,6 +56,8 @@ namespace PathSnip.Services.Snap
             {
                 return SnapResult.None;
             }
+
+            element = ResolveDeepestElementAtPoint(element, screenPoint, cancellationToken);
 
             cancellationToken.ThrowIfCancellationRequested();
 
@@ -144,6 +147,93 @@ namespace PathSnip.Services.Snap
             }
 
             return new SnapResult(bounds, label, true, SnapKind.Element, SnapSource.UIA, 0.85, windowHandle);
+        }
+
+        private static AutomationElement ResolveDeepestElementAtPoint(AutomationElement rootElement, Point screenPoint, CancellationToken cancellationToken)
+        {
+            AutomationElement current = rootElement;
+            for (int depth = 0; depth < MaxTraversalDepth; depth++)
+            {
+                cancellationToken.ThrowIfCancellationRequested();
+
+                AutomationElement next = FindBestChildContainingPoint(current, screenPoint);
+                if (next == null)
+                {
+                    break;
+                }
+
+                current = next;
+            }
+
+            return current;
+        }
+
+        private static AutomationElement FindBestChildContainingPoint(AutomationElement parent, Point screenPoint)
+        {
+            AutomationElement child;
+            try
+            {
+                child = TreeWalker.RawViewWalker.GetFirstChild(parent);
+            }
+            catch (ElementNotAvailableException)
+            {
+                return null;
+            }
+            catch (InvalidOperationException)
+            {
+                return null;
+            }
+
+            AutomationElement bestChild = null;
+            double bestArea = double.MaxValue;
+
+            while (child != null)
+            {
+                Rect childBounds;
+                if (TryGetBounds(child, out childBounds) && !childBounds.IsEmpty && childBounds.Contains(screenPoint))
+                {
+                    double area = Math.Max(1, childBounds.Width * childBounds.Height);
+                    if (area < bestArea)
+                    {
+                        bestArea = area;
+                        bestChild = child;
+                    }
+                }
+
+                try
+                {
+                    child = TreeWalker.RawViewWalker.GetNextSibling(child);
+                }
+                catch (ElementNotAvailableException)
+                {
+                    break;
+                }
+                catch (InvalidOperationException)
+                {
+                    break;
+                }
+            }
+
+            return bestChild;
+        }
+
+        private static bool TryGetBounds(AutomationElement element, out Rect bounds)
+        {
+            try
+            {
+                bounds = element.Current.BoundingRectangle;
+                return true;
+            }
+            catch (ElementNotAvailableException)
+            {
+                bounds = Rect.Empty;
+                return false;
+            }
+            catch (InvalidOperationException)
+            {
+                bounds = Rect.Empty;
+                return false;
+            }
         }
 
         private static bool IsElementBoundsInsideWindow(Rect elementBounds, Rect windowBounds)

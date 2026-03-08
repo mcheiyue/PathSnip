@@ -13,6 +13,7 @@ namespace PathSnip.Services.Snap
         private const double MinElementSize = 6;
         private const double WindowBoundsTolerance = 2;
         private const double MaxBoundsAreaScale = 1.02;
+        private const int MaxHitTestDepth = 8;
 
         public Task<SnapResult> GetCurrentSnapAsync(Point screenPoint, int currentProcessId, SnapResult currentSnap, CancellationToken cancellationToken)
         {
@@ -62,26 +63,7 @@ namespace PathSnip.Services.Snap
 
             IAccessible target = accessible;
             object targetChild = NormalizeChildId(child);
-
-            try
-            {
-                object hit = accessible.accHitTest(point.X, point.Y);
-                if (hit is IAccessible)
-                {
-                    target = (IAccessible)hit;
-                    targetChild = ChildIdSelf;
-                }
-                else if (hit is int)
-                {
-                    targetChild = (int)hit;
-                }
-            }
-            catch (COMException)
-            {
-            }
-            catch (InvalidCastException)
-            {
-            }
+            ResolveDeepestAccessibleAtPoint(accessible, point.X, point.Y, cancellationToken, out target, out targetChild);
 
             Rect bounds;
             if (!TryGetAccessibleBounds(target, targetChild, out bounds) &&
@@ -191,6 +173,83 @@ namespace PathSnip.Services.Snap
             }
 
             return ChildIdSelf;
+        }
+
+        private static void ResolveDeepestAccessibleAtPoint(
+            IAccessible root,
+            int x,
+            int y,
+            CancellationToken cancellationToken,
+            out IAccessible target,
+            out object targetChild)
+        {
+            target = root;
+            targetChild = ChildIdSelf;
+
+            IAccessible current = root;
+            for (int depth = 0; depth < MaxHitTestDepth; depth++)
+            {
+                cancellationToken.ThrowIfCancellationRequested();
+
+                object hit;
+                try
+                {
+                    hit = current.accHitTest(x, y);
+                }
+                catch (COMException)
+                {
+                    break;
+                }
+                catch (InvalidCastException)
+                {
+                    break;
+                }
+
+                if (hit is IAccessible)
+                {
+                    current = (IAccessible)hit;
+                    target = current;
+                    targetChild = ChildIdSelf;
+                    continue;
+                }
+
+                if (hit is int)
+                {
+                    int childId = (int)hit;
+                    if (childId == ChildIdSelf)
+                    {
+                        target = current;
+                        targetChild = ChildIdSelf;
+                        break;
+                    }
+
+                    object childObj = null;
+                    try
+                    {
+                        childObj = current.get_accChild(childId);
+                    }
+                    catch (COMException)
+                    {
+                    }
+                    catch (InvalidCastException)
+                    {
+                    }
+
+                    if (childObj is IAccessible)
+                    {
+                        current = (IAccessible)childObj;
+                        target = current;
+                        targetChild = ChildIdSelf;
+                        continue;
+                    }
+
+                    target = current;
+                    targetChild = childId;
+                    break;
+                }
+
+                break;
+            }
         }
 
         private static bool TryGetWindowProcessId(IntPtr hWnd, out uint processId)
