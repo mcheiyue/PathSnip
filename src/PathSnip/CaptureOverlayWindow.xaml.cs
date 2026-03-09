@@ -591,7 +591,8 @@ namespace PathSnip
                     _currentSnapResult,
                     requestVersion,
                     ElementSnapTimeoutMs,
-                    currentCts.Token);
+                    currentCts.Token,
+                    LogService.CreateOperationId("snap"));
 
                 if (!_snapEngine.IsCurrentRequest(requestVersion))
                 {
@@ -1463,9 +1464,11 @@ namespace PathSnip
                     return true;
 
                 case OverlayShortcutAction.CycleNext:
+                    LogService.LogInfo("snap.cycle.tab", "cycle next requested", stage: "shortcut");
                     return await CycleSnapTargetAsync(true);
 
                 case OverlayShortcutAction.CyclePrevious:
+                    LogService.LogInfo("snap.cycle.shift_tab", "cycle previous requested", stage: "shortcut");
                     return await CycleSnapTargetAsync(false);
 
                 case OverlayShortcutAction.BypassOn:
@@ -1475,10 +1478,12 @@ namespace PathSnip
                     {
                         WindowHighlightRect.Visibility = Visibility.Collapsed;
                     }
+                    LogService.LogInfo("snap.mode.bypass_alt", "alt bypass enabled", stage: "shortcut");
                     return true;
 
                 case OverlayShortcutAction.BypassOff:
                     _isSnapBypassedByAlt = false;
+                    LogService.LogInfo("snap.mode.bypass_alt", "alt bypass disabled", stage: "shortcut");
                     return true;
 
                 default:
@@ -1544,7 +1549,8 @@ namespace PathSnip
                 _currentSnapResult,
                 requestVersion,
                 ElementSnapTimeoutMs,
-                CancellationToken.None);
+                CancellationToken.None,
+                LogService.CreateOperationId("snap"));
 
             if (!_snapEngine.IsCurrentRequest(requestVersion) || !upgradedSnap.IsValid || !upgradedSnap.Bounds.HasValue)
             {

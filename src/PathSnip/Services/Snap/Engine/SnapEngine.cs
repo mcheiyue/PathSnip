@@ -5,6 +5,7 @@ using System.Threading.Tasks;
 using System.Threading;
 using System.Runtime.InteropServices;
 using System.Windows;
+using PathSnip.Services;
 
 namespace PathSnip.Services.Snap
 {
@@ -69,80 +70,113 @@ namespace PathSnip.Services.Snap
             SnapResult currentSnap,
             long requestVersion,
             int timeoutMs,
-            CancellationToken cancellationToken)
+            CancellationToken cancellationToken,
+            string operationId = null)
         {
+            operationId = string.IsNullOrWhiteSpace(operationId) ? LogService.CreateOperationId("snap") : operationId;
+
             if (!currentSnap.IsValid || !currentSnap.Bounds.HasValue)
             {
+                LogService.LogWarn("snap.element.skipped", "window snap is invalid", operationId, "element.guard");
                 return SnapResult.None;
             }
 
             if (_uiaSnapProvider == null && _msaaSnapProvider == null)
             {
+                LogService.LogWarn("snap.element.skipped", "no element providers available", operationId, "element.guard");
                 return SnapResult.None;
             }
 
             if (!IsCurrentRequest(requestVersion))
             {
+                LogService.LogWarn("snap.element.stale", $"requestVersion={requestVersion}", operationId, "element.guard");
                 return SnapResult.None;
             }
 
+            LogService.LogInfo(
+                "snap.element.requested",
+                $"point=({screenPoint.X:F1},{screenPoint.Y:F1}) timeoutMs={timeoutMs} requestVersion={requestVersion}",
+                operationId,
+                "element.request");
+
             bool msaaFirst = IsMsaaPreferred(currentSnap.WindowHandle);
-            var providers = new List<Func<CancellationToken, Task<SnapResult>>>(2);
+            var providers = new List<KeyValuePair<string, Func<CancellationToken, Task<SnapResult>>>>(2);
 
             if (msaaFirst)
             {
                 if (_msaaSnapProvider != null)
                 {
-                    providers.Add(ct => _msaaSnapProvider.GetCurrentSnapAsync(screenPoint, currentProcessId, currentSnap, ct));
+                    providers.Add(new KeyValuePair<string, Func<CancellationToken, Task<SnapResult>>>(
+                        "MSAA",
+                        ct => _msaaSnapProvider.GetCurrentSnapAsync(screenPoint, currentProcessId, currentSnap, ct)));
                 }
 
                 if (_uiaSnapProvider != null)
                 {
-                    providers.Add(ct => _uiaSnapProvider.GetCurrentSnapAsync(screenPoint, currentProcessId, currentSnap, ct));
+                    providers.Add(new KeyValuePair<string, Func<CancellationToken, Task<SnapResult>>>(
+                        "UIA",
+                        ct => _uiaSnapProvider.GetCurrentSnapAsync(screenPoint, currentProcessId, currentSnap, ct)));
                 }
             }
             else
             {
                 if (_uiaSnapProvider != null)
                 {
-                    providers.Add(ct => _uiaSnapProvider.GetCurrentSnapAsync(screenPoint, currentProcessId, currentSnap, ct));
+                    providers.Add(new KeyValuePair<string, Func<CancellationToken, Task<SnapResult>>>(
+                        "UIA",
+                        ct => _uiaSnapProvider.GetCurrentSnapAsync(screenPoint, currentProcessId, currentSnap, ct)));
                 }
 
                 if (_msaaSnapProvider != null)
                 {
-                    providers.Add(ct => _msaaSnapProvider.GetCurrentSnapAsync(screenPoint, currentProcessId, currentSnap, ct));
+                    providers.Add(new KeyValuePair<string, Func<CancellationToken, Task<SnapResult>>>(
+                        "MSAA",
+                        ct => _msaaSnapProvider.GetCurrentSnapAsync(screenPoint, currentProcessId, currentSnap, ct)));
                 }
             }
 
             for (int i = 0; i < providers.Count; i++)
             {
+                string providerName = providers[i].Key;
+
                 if (!IsCurrentRequest(requestVersion))
                 {
+                    LogService.LogWarn("snap.element.stale", $"provider={providerName} requestVersion={requestVersion}", operationId, "element.guard");
                     return SnapResult.None;
                 }
 
-                SnapResult snapResult = await TryDetectWithTimeoutAsync(providers[i], timeoutMs, cancellationToken).ConfigureAwait(false);
+                LogService.LogInfo("snap.element.provider.try", $"provider={providerName}", operationId, "element.detect");
+
+                SnapResult snapResult = await TryDetectWithTimeoutAsync(providers[i].Value, timeoutMs, cancellationToken).ConfigureAwait(false);
                 if (!snapResult.IsValid)
                 {
+                    LogService.LogWarn("snap.element.provider.empty", $"provider={providerName}", operationId, "element.detect");
                     continue;
                 }
 
                 if (!IsCurrentRequest(requestVersion))
                 {
+                    LogService.LogWarn("snap.element.stale", $"provider={providerName} requestVersion={requestVersion}", operationId, "element.guard");
                     return SnapResult.None;
                 }
 
-                SnapResult acceptedResult = ApplyPolicies(currentSnap, snapResult, screenPoint);
+                SnapResult acceptedResult = ApplyPolicies(currentSnap, snapResult, screenPoint, operationId, providerName);
                 if (acceptedResult.IsValid)
                 {
+                    LogService.LogInfo(
+                        "snap.element.completed",
+                        $"provider={providerName} source={acceptedResult.Source} bounds=({acceptedResult.Bounds?.Left:F1},{acceptedResult.Bounds?.Top:F1},{acceptedResult.Bounds?.Width:F1},{acceptedResult.Bounds?.Height:F1})",
+                        operationId,
+                        "element.done");
                     return acceptedResult;
                 }
             }
 
+            LogService.LogWarn("snap.element.rejected", "all providers rejected by policy or no valid candidate", operationId, "element.done");
             return SnapResult.None;
         }
 
-        private SnapResult ApplyPolicies(SnapResult windowSnap, SnapResult candidate, Point cursorPoint)
+        private SnapResult ApplyPolicies(SnapResult windowSnap, SnapResult candidate, Point cursorPoint, string operationId, string providerName)
         {
             lock (_policySync)
             {
@@ -156,21 +190,25 @@ namespace PathSnip.Services.Snap
 
                 if (_ignorePolicy.ShouldIgnore(windowSnap, candidate))
                 {
+                    LogService.LogWarn("snap.candidates.ignored", $"provider={providerName} source={candidate.Source}", operationId, "policy.ignore");
                     return SnapResult.None;
                 }
 
                 if (!_rankingPolicy.ShouldUseElement(windowSnap, candidate, cursorPoint, _lastAcceptedElement))
                 {
+                    LogService.LogWarn("snap.candidates.rejected", $"provider={providerName} source={candidate.Source}", operationId, "policy.rank");
                     return SnapResult.None;
                 }
 
                 SnapResult stabilized = _stabilizer.Evaluate(candidate, DateTime.UtcNow);
                 if (!stabilized.IsValid)
                 {
+                    LogService.LogWarn("snap.stabilizer.keep", $"provider={providerName}", operationId, "policy.stabilizer");
                     return SnapResult.None;
                 }
 
                 _lastAcceptedElement = stabilized;
+                LogService.LogInfo("snap.stabilizer.switch", $"provider={providerName} source={stabilized.Source}", operationId, "policy.stabilizer");
                 return stabilized;
             }
         }
