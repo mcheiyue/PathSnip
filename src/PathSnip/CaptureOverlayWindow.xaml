@@ -484,7 +484,7 @@
         
         <!-- 提示文字 -->
         <TextBlock x:Name="HintText"
-                   Text="拖拽选择区域，右键或 ESC 取消"
+                   Text="悬停吸附目标，拖拽可手动框选，右键或 ESC 取消"
                    Foreground="White"
                    FontSize="14"
                    FontFamily="Segoe UI"

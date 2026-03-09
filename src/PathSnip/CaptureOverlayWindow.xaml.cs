@@ -265,6 +265,7 @@ namespace PathSnip
             // 恢复初始状态
             SelectionRect.IsHitTestVisible = true;
             SizeLabel.IsHitTestVisible = true;
+            UpdateIdleHintText();
             HintText.Visibility = Visibility.Visible;
 
             // 清除当前选区
@@ -304,6 +305,7 @@ namespace PathSnip
             HideResizeAnchors();
 
             // 显示提示文字
+            UpdateIdleHintText();
             HintText.Visibility = Visibility.Visible;
 
             // 恢复可交互性
@@ -599,6 +601,16 @@ namespace PathSnip
             _elementLockUntil = DateTime.MinValue;
         }
 
+        private void UpdateIdleHintText()
+        {
+            if (HintText == null)
+            {
+                return;
+            }
+
+            HintText.Text = "悬停吸附目标，拖拽可手动框选，右键或 ESC 取消";
+        }
+
         private void CancelElementSnapRequest()
         {
             var cts = Interlocked.Exchange(ref _elementSnapCts, null);
@@ -713,6 +725,7 @@ namespace PathSnip
 
         private void ShowToolbar()
         {
+            HintText.Visibility = Visibility.Collapsed;
             Toolbar.Visibility = Visibility.Visible;
             Toolbar.Measure(new Size(double.PositiveInfinity, double.PositiveInfinity));
             Toolbar.Arrange(new Rect(Toolbar.DesiredSize));
@@ -1432,6 +1445,8 @@ namespace PathSnip
             AnnotationCanvas.Visibility = Visibility.Collapsed;
             MosaicCanvas.Visibility = Visibility.Collapsed;
             HideResizeAnchors();
+            UpdateIdleHintText();
+            HintText.Visibility = Visibility.Visible;
 
             CaptureCancelled?.Invoke();
         }
