@@ -91,7 +91,10 @@ namespace PathSnip
             new RegionSnapProvider());
         private SnapResult _currentSnapResult = SnapResult.None;
         private SnapResult _currentWindowSnap = SnapResult.None;
+        private SnapResult _lastStableRegionSnap = SnapResult.None;
         private DateTime _lastRegionSelectLogAt = DateTime.MinValue;
+        private DateTime _regionLockUntil = DateTime.MinValue;
+        private int _regionFallbackMissCount;
         private readonly DispatcherTimer _elementSnapHoverTimer;
         private CancellationTokenSource _elementSnapCts;
         private Point _lastHoverMousePosition;
@@ -99,7 +102,10 @@ namespace PathSnip
         private const int ElementSnapTimeoutMs = 100;
         private const int ElementProbeMinIntervalMs = 120;
         private const int ElementLockGraceMs = 120;
+        private const int RegionLockGraceMs = 180;
+        private const int RegionFallbackRequiredMisses = 2;
         private const double ElementExitTolerancePx = 8;
+        private const double RegionExitTolerancePx = 12;
         private const double FastPointerSpeedThreshold = 900;
         private const double ElementPromotionSpeedThreshold = 260;
         private readonly bool _enableSmartSnap;
@@ -264,6 +270,7 @@ namespace PathSnip
             _selectionSession.Reset();
             _currentSnapResult = SnapResult.None;
             _currentWindowSnap = SnapResult.None;
+            ResetRegionLockState();
             _isSnapBypassedByAlt = false;
             _snapIntentMode = SnapIntentMode.WindowLock;
             _selectionCompleted = false;
@@ -312,6 +319,7 @@ namespace PathSnip
             _selectionSession.Reset();
             _currentSnapResult = SnapResult.None;
             _currentWindowSnap = SnapResult.None;
+            ResetRegionLockState();
             _isSnapBypassedByAlt = false;
             _snapIntentMode = SnapIntentMode.WindowLock;
             _selectionCompleted = false;
@@ -412,6 +420,7 @@ namespace PathSnip
 
                     StopElementSnapUpgrade();
                     _currentSnapResult = SnapResult.None;
+                    ResetRegionLockState();
                     MagnifierUI.Visibility = Visibility.Visible;
                     return;
                 }
@@ -425,6 +434,7 @@ namespace PathSnip
 
                     StopElementSnapUpgrade();
                     _currentSnapResult = SnapResult.None;
+                    ResetRegionLockState();
                     MagnifierUI.Visibility = Visibility.Visible;
                     return;
                 }
@@ -499,8 +509,10 @@ namespace PathSnip
 
             SnapResult windowSnap = _snapEngine.GetCurrentSnap(cursorScreenPoint, _currentProcessId);
             _currentWindowSnap = windowSnap;
+            bool isFastPointerMotion = IsFastPointerMotion();
 
             SnapResult snapResult = windowSnap;
+            bool regionSelected = false;
             if (_enableSmartSnap && _smartSnapMode != SmartSnapMode.ManualOnly && !_isSnapBypassedByAlt)
             {
                 SnapResult regionSnap = _snapEngine.TryGetRegionSnap(cursorScreenPoint, _currentProcessId, windowSnap);
@@ -510,9 +522,11 @@ namespace PathSnip
                     double regionArea = Math.Max(1, regionSnap.Bounds.Value.Width * regionSnap.Bounds.Value.Height);
                     double areaRatio = regionArea / windowArea;
 
-                    if (!IsFastPointerMotion() && areaRatio <= 0.98)
+                    if (!isFastPointerMotion && areaRatio <= 0.98)
                     {
                         snapResult = regionSnap;
+                        regionSelected = true;
+                        RememberStableRegion(regionSnap, now);
 
                         if ((now - _lastRegionSelectLogAt).TotalMilliseconds >= 250)
                         {
@@ -524,6 +538,12 @@ namespace PathSnip
                         }
                     }
                 }
+            }
+
+            if (!regionSelected && TryKeepRegionLock(windowSnap, cursorScreenPoint, now, out SnapResult heldRegion))
+            {
+                snapResult = heldRegion;
+                regionSelected = true;
             }
 
             if (!_snapEngine.IsCurrentWindowRequest(requestVersion))
@@ -1713,6 +1733,7 @@ namespace PathSnip
             _selectionSession.Reset();
             _currentSnapResult = SnapResult.None;
             _currentWindowSnap = SnapResult.None;
+            ResetRegionLockState();
             _isSnapBypassedByAlt = false;
             _snapIntentMode = SnapIntentMode.WindowLock;
             SelectionRect.Visibility = Visibility.Collapsed;
@@ -1750,6 +1771,58 @@ namespace PathSnip
         private bool IsFastPointerMotion()
         {
             return _pointerSpeedPxPerSecond >= FastPointerSpeedThreshold;
+        }
+
+        private bool TryKeepRegionLock(SnapResult windowSnap, Point cursorScreenPoint, DateTime now, out SnapResult heldRegion)
+        {
+            heldRegion = SnapResult.None;
+
+            if (!_lastStableRegionSnap.IsValid || !_lastStableRegionSnap.Bounds.HasValue)
+            {
+                return false;
+            }
+
+            if (!windowSnap.IsValid || windowSnap.Kind != SnapKind.Window || !IsSameWindow(_lastStableRegionSnap, windowSnap))
+            {
+                ResetRegionLockState();
+                return false;
+            }
+
+            Rect toleratedBounds = _lastStableRegionSnap.Bounds.Value;
+            toleratedBounds.Inflate(RegionExitTolerancePx, RegionExitTolerancePx);
+            if (!toleratedBounds.Contains(cursorScreenPoint))
+            {
+                return false;
+            }
+
+            if (now <= _regionLockUntil)
+            {
+                heldRegion = _lastStableRegionSnap;
+                return true;
+            }
+
+            if (_regionFallbackMissCount >= RegionFallbackRequiredMisses)
+            {
+                return false;
+            }
+
+            _regionFallbackMissCount++;
+            heldRegion = _lastStableRegionSnap;
+            return true;
+        }
+
+        private void RememberStableRegion(SnapResult regionSnap, DateTime now)
+        {
+            _lastStableRegionSnap = regionSnap;
+            _regionLockUntil = now.AddMilliseconds(RegionLockGraceMs);
+            _regionFallbackMissCount = 0;
+        }
+
+        private void ResetRegionLockState()
+        {
+            _lastStableRegionSnap = SnapResult.None;
+            _regionLockUntil = DateTime.MinValue;
+            _regionFallbackMissCount = 0;
         }
 
         private bool CanPromoteToElement()
