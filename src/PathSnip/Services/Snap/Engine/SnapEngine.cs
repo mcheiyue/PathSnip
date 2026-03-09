@@ -18,7 +18,8 @@ namespace PathSnip.Services.Snap
         private readonly SnapRankingPolicy _rankingPolicy = new SnapRankingPolicy();
         private readonly SnapStabilizer _stabilizer = new SnapStabilizer();
         private readonly object _policySync = new object();
-        private long _requestVersion;
+        private long _windowRequestVersion;
+        private long _elementRequestVersion;
         private Rect? _lastWindowBounds;
         private SnapResult _lastAcceptedElement = SnapResult.None;
 
@@ -40,14 +41,24 @@ namespace PathSnip.Services.Snap
             _msaaSnapProvider = msaaSnapProvider;
         }
 
-        public long NextRequestVersion()
+        public long NextWindowRequestVersion()
         {
-            return Interlocked.Increment(ref _requestVersion);
+            return Interlocked.Increment(ref _windowRequestVersion);
         }
 
-        public bool IsCurrentRequest(long requestVersion)
+        public bool IsCurrentWindowRequest(long requestVersion)
         {
-            return requestVersion == Volatile.Read(ref _requestVersion);
+            return requestVersion == Volatile.Read(ref _windowRequestVersion);
+        }
+
+        public long NextElementRequestVersion()
+        {
+            return Interlocked.Increment(ref _elementRequestVersion);
+        }
+
+        public bool IsCurrentElementRequest(long requestVersion)
+        {
+            return requestVersion == Volatile.Read(ref _elementRequestVersion);
         }
 
         public SnapResult GetCurrentSnap(Point screenPoint, int currentProcessId)
@@ -87,7 +98,7 @@ namespace PathSnip.Services.Snap
                 return SnapResult.None;
             }
 
-            if (!IsCurrentRequest(requestVersion))
+            if (!IsCurrentElementRequest(requestVersion))
             {
                 LogService.LogWarn("snap.element.stale", $"requestVersion={requestVersion}", operationId, "element.guard");
                 return SnapResult.None;
@@ -139,7 +150,7 @@ namespace PathSnip.Services.Snap
             {
                 string providerName = providers[i].Key;
 
-                if (!IsCurrentRequest(requestVersion))
+                if (!IsCurrentElementRequest(requestVersion))
                 {
                     LogService.LogWarn("snap.element.stale", $"provider={providerName} requestVersion={requestVersion}", operationId, "element.guard");
                     return SnapResult.None;
@@ -154,7 +165,7 @@ namespace PathSnip.Services.Snap
                     continue;
                 }
 
-                if (!IsCurrentRequest(requestVersion))
+                if (!IsCurrentElementRequest(requestVersion))
                 {
                     LogService.LogWarn("snap.element.stale", $"provider={providerName} requestVersion={requestVersion}", operationId, "element.guard");
                     return SnapResult.None;

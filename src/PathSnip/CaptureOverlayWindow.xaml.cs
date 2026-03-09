@@ -91,6 +91,7 @@ namespace PathSnip
         private Point _lastHoverMousePosition;
         private const int ElementSnapHoverDelayMs = 40;
         private const int ElementSnapTimeoutMs = 100;
+        private const int ElementProbeMinIntervalMs = 120;
         private const int ElementLockGraceMs = 120;
         private const double ElementExitTolerancePx = 8;
         private const double FastPointerSpeedThreshold = 900;
@@ -104,6 +105,10 @@ namespace PathSnip
         private DateTime _lastPointerMoveAt = DateTime.MinValue;
         private Point _lastPointerScreenPoint;
         private double _pointerSpeedPxPerSecond;
+        private DateTime _lastElementProbeRequestedAt = DateTime.MinValue;
+        private bool _isElementProbeRunning;
+        private bool _hasPendingElementProbe;
+        private Point _pendingProbeMousePosition;
 
         private enum SnapIntentMode
         {
@@ -409,6 +414,7 @@ namespace PathSnip
                         WindowHighlightRect.Visibility = Visibility.Collapsed;
                     }
 
+                    StopElementSnapUpgrade();
                     _currentSnapResult = SnapResult.None;
                     MagnifierUI.Visibility = Visibility.Visible;
                     return;
@@ -418,7 +424,7 @@ namespace PathSnip
                 if ((now - _lastWindowDetectionTime).TotalMilliseconds >= 50)
                 {
                     _lastWindowDetectionTime = now;
-                    long requestVersion = _snapEngine.NextRequestVersion();
+                    long requestVersion = _snapEngine.NextWindowRequestVersion();
                     UpdateSnapTargetUnderCursor(e, requestVersion, now, cursorScreenPoint);
                 }
 
@@ -472,7 +478,7 @@ namespace PathSnip
 
         private void UpdateSnapTargetUnderCursor(MouseEventArgs e, long requestVersion, DateTime now, Point cursorScreenPoint)
         {
-            if (!_snapEngine.IsCurrentRequest(requestVersion))
+            if (!_snapEngine.IsCurrentWindowRequest(requestVersion))
             {
                 return;
             }
@@ -484,7 +490,7 @@ namespace PathSnip
 
             SnapResult snapResult = _snapEngine.GetCurrentSnap(cursorScreenPoint, _currentProcessId);
 
-            if (!_snapEngine.IsCurrentRequest(requestVersion))
+            if (!_snapEngine.IsCurrentWindowRequest(requestVersion))
             {
                 return;
             }
@@ -516,6 +522,23 @@ namespace PathSnip
             {
                 _elementSnapHoverTimer.Stop();
                 CancelElementSnapRequest();
+                return;
+            }
+
+            if (_isElementProbeRunning)
+            {
+                _hasPendingElementProbe = true;
+                _pendingProbeMousePosition = mousePos;
+                return;
+            }
+
+            if (_lastElementProbeRequestedAt != DateTime.MinValue &&
+                (now - _lastElementProbeRequestedAt).TotalMilliseconds < ElementProbeMinIntervalMs)
+            {
+                if (!_elementSnapHoverTimer.IsEnabled)
+                {
+                    _elementSnapHoverTimer.Start();
+                }
                 return;
             }
 
@@ -556,6 +579,11 @@ namespace PathSnip
         {
             _elementSnapHoverTimer.Stop();
 
+            if (_isElementProbeRunning)
+            {
+                return;
+            }
+
             if (_selectionSession.IsSelecting || _selectionCompleted)
             {
                 return;
@@ -571,6 +599,14 @@ namespace PathSnip
                 return;
             }
 
+            var now = DateTime.Now;
+            if (_lastElementProbeRequestedAt != DateTime.MinValue &&
+                (now - _lastElementProbeRequestedAt).TotalMilliseconds < ElementProbeMinIntervalMs)
+            {
+                _elementSnapHoverTimer.Start();
+                return;
+            }
+
             if (!_currentSnapResult.IsValid || !_currentSnapResult.Bounds.HasValue)
             {
                 return;
@@ -579,8 +615,10 @@ namespace PathSnip
             CancelElementSnapRequest();
             var currentCts = new CancellationTokenSource();
             _elementSnapCts = currentCts;
+            _isElementProbeRunning = true;
+            _lastElementProbeRequestedAt = now;
 
-            long requestVersion = _snapEngine.NextRequestVersion();
+            long requestVersion = _snapEngine.NextElementRequestVersion();
             Point screenPos = new Point(_lastHoverMousePosition.X + Left, _lastHoverMousePosition.Y + Top);
 
             try
@@ -594,7 +632,7 @@ namespace PathSnip
                     currentCts.Token,
                     LogService.CreateOperationId("snap"));
 
-                if (!_snapEngine.IsCurrentRequest(requestVersion))
+                if (!_snapEngine.IsCurrentElementRequest(requestVersion))
                 {
                     return;
                 }
@@ -622,6 +660,14 @@ namespace PathSnip
                 }
 
                 currentCts.Dispose();
+                _isElementProbeRunning = false;
+
+                if (_hasPendingElementProbe && !_selectionSession.IsSelecting && !_selectionCompleted)
+                {
+                    _hasPendingElementProbe = false;
+                    _lastHoverMousePosition = _pendingProbeMousePosition;
+                    _elementSnapHoverTimer.Start();
+                }
             }
         }
 
@@ -654,6 +700,8 @@ namespace PathSnip
         private void StopElementSnapUpgrade()
         {
             _elementSnapHoverTimer.Stop();
+            _isElementProbeRunning = false;
+            _hasPendingElementProbe = false;
             CancelElementSnapRequest();
             _snapIntentMode = SnapIntentMode.WindowLock;
             _elementLockUntil = DateTime.MinValue;
@@ -671,6 +719,7 @@ namespace PathSnip
 
         private void CancelElementSnapRequest()
         {
+            _isElementProbeRunning = false;
             var cts = Interlocked.Exchange(ref _elementSnapCts, null);
             if (cts == null)
             {
@@ -1542,7 +1591,7 @@ namespace PathSnip
                 }
             }
 
-            long requestVersion = _snapEngine.NextRequestVersion();
+            long requestVersion = _snapEngine.NextElementRequestVersion();
             SnapResult upgradedSnap = await _snapEngine.TryGetElementSnapAsync(
                 screenPoint,
                 _currentProcessId,
@@ -1552,7 +1601,7 @@ namespace PathSnip
                 CancellationToken.None,
                 LogService.CreateOperationId("snap"));
 
-            if (!_snapEngine.IsCurrentRequest(requestVersion) || !upgradedSnap.IsValid || !upgradedSnap.Bounds.HasValue)
+            if (!_snapEngine.IsCurrentElementRequest(requestVersion) || !upgradedSnap.IsValid || !upgradedSnap.Bounds.HasValue)
             {
                 return false;
             }
