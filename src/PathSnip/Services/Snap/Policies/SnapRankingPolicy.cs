@@ -11,15 +11,21 @@ namespace PathSnip.Services.Snap
             SnapResult windowSnap,
             SnapResult elementSnap,
             Point cursorPoint,
-            SnapResult lastAcceptedElement)
+            SnapResult lastAcceptedElement,
+            SnapAppProfile appProfile,
+            out string reason)
         {
+            reason = string.Empty;
+
             if (!windowSnap.IsValid || !windowSnap.Bounds.HasValue)
             {
+                reason = "window_invalid";
                 return elementSnap.IsValid;
             }
 
             if (!elementSnap.IsValid || !elementSnap.Bounds.HasValue)
             {
+                reason = "element_invalid";
                 return false;
             }
 
@@ -28,22 +34,41 @@ namespace PathSnip.Services.Snap
             double windowArea = Math.Max(1, windowBounds.Width * windowBounds.Height);
             double elementArea = Math.Max(1, elementBounds.Width * elementBounds.Height);
             double areaRatio = elementArea / windowArea;
-            if (elementBounds.Contains(cursorPoint) && areaRatio >= 0.005 && areaRatio <= 0.9)
+
+            double quickPassMinAreaRatio = appProfile == SnapAppProfile.Explorer ? 0.002 :
+                                           appProfile == SnapAppProfile.Ide ? 0.003 :
+                                           appProfile == SnapAppProfile.Browser ? 0.004 : 0.005;
+
+            if (elementBounds.Contains(cursorPoint) && areaRatio >= quickPassMinAreaRatio && areaRatio <= 0.92)
             {
+                reason = "quick_pass";
                 return true;
             }
 
-            double elementScore = ScoreElement(windowSnap, elementSnap, cursorPoint, lastAcceptedElement);
-            double windowScore = ScoreWindow(windowSnap, cursorPoint);
-            return elementScore >= windowScore + MinAcceptDelta;
+            double elementScore = ScoreElement(windowSnap, elementSnap, cursorPoint, lastAcceptedElement, appProfile);
+            double windowScore = ScoreWindow(windowSnap, cursorPoint, appProfile);
+            bool accepted = elementScore >= windowScore + MinAcceptDelta;
+            reason = accepted
+                ? $"score_pass element={elementScore:F1} window={windowScore:F1}"
+                : $"score_reject element={elementScore:F1} window={windowScore:F1}";
+            return accepted;
         }
 
-        private static double ScoreElement(SnapResult windowSnap, SnapResult elementSnap, Point cursorPoint, SnapResult lastAcceptedElement)
+        private static double ScoreElement(SnapResult windowSnap, SnapResult elementSnap, Point cursorPoint, SnapResult lastAcceptedElement, SnapAppProfile appProfile)
         {
             Rect windowBounds = windowSnap.Bounds.Value;
             Rect elementBounds = elementSnap.Bounds.Value;
 
             double sourceWeight = elementSnap.Source == SnapSource.MSAA ? 38 : 36;
+            if (appProfile == SnapAppProfile.Explorer)
+            {
+                sourceWeight += 3;
+            }
+            else if (appProfile == SnapAppProfile.Ide)
+            {
+                sourceWeight += 1;
+            }
+
             double cursorFitWeight = elementBounds.Contains(cursorPoint) ? 15 : 0;
 
             double windowArea = Math.Max(1, windowBounds.Width * windowBounds.Height);
@@ -51,15 +76,15 @@ namespace PathSnip.Services.Snap
             double areaRatio = elementArea / windowArea;
 
             double sizeWeight;
-            if (areaRatio <= 0.02)
+            if (areaRatio <= 0.015)
             {
-                sizeWeight = 6;
+                sizeWeight = appProfile == SnapAppProfile.Explorer ? 10 : 6;
             }
-            else if (areaRatio <= 0.35)
+            else if (areaRatio <= 0.55)
             {
                 sizeWeight = 15;
             }
-            else if (areaRatio <= 0.65)
+            else if (areaRatio <= 0.75)
             {
                 sizeWeight = 10;
             }
@@ -80,10 +105,12 @@ namespace PathSnip.Services.Snap
             return sourceWeight + cursorFitWeight + sizeWeight + interactiveWeight + stabilityWeight;
         }
 
-        private static double ScoreWindow(SnapResult windowSnap, Point cursorPoint)
+        private static double ScoreWindow(SnapResult windowSnap, Point cursorPoint, SnapAppProfile appProfile)
         {
             Rect windowBounds = windowSnap.Bounds.Value;
-            double baseScore = 28;
+            double baseScore = appProfile == SnapAppProfile.Explorer ? 24 :
+                               appProfile == SnapAppProfile.Browser ? 26 :
+                               appProfile == SnapAppProfile.Ide ? 27 : 28;
             double cursorFitWeight = windowBounds.Contains(cursorPoint) ? 6 : 0;
             return baseScore + cursorFitWeight;
         }

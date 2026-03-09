@@ -5,16 +5,25 @@ namespace PathSnip.Services.Snap
 {
     public sealed class SnapIgnorePolicy
     {
-        private const double MinElementSize = 8;
+        private const double DefaultMinElementSize = 8;
+        private const double ExplorerMinElementSize = 6;
         private const double MaxElementAreaRatio = 0.9;
-        private const double EmptyLabelMinAreaRatio = 0.01;
+        private const double ExplorerMaxElementAreaRatio = 0.96;
+        private const double EmptyLabelMinAreaRatio = 0.02;
         private const double EmptyLabelMaxAreaRatio = 0.75;
+        private const double ExplorerEmptyLabelMinAreaRatio = 0.18;
+        private const double ExplorerEmptyLabelMaxAreaRatio = 0.75;
         private const double ExtremeAspectRatio = 4.5;
+        private const double ExplorerExtremeAspectRatio = 7.0;
+        private const double TinyEmptyLabelAreaRatio = 0.004;
 
-        public bool ShouldIgnore(SnapResult windowSnap, SnapResult candidate)
+        public bool ShouldIgnore(SnapResult windowSnap, SnapResult candidate, SnapAppProfile appProfile, out string reason)
         {
+            reason = string.Empty;
+
             if (!candidate.IsValid || !candidate.Bounds.HasValue)
             {
+                reason = "invalid_candidate";
                 return true;
             }
 
@@ -24,8 +33,10 @@ namespace PathSnip.Services.Snap
             }
 
             Rect elementBounds = candidate.Bounds.Value;
-            if (elementBounds.Width < MinElementSize || elementBounds.Height < MinElementSize)
+            double minElementSize = appProfile == SnapAppProfile.Explorer ? ExplorerMinElementSize : DefaultMinElementSize;
+            if (elementBounds.Width < minElementSize || elementBounds.Height < minElementSize)
             {
+                reason = "too_small";
                 return true;
             }
 
@@ -38,8 +49,10 @@ namespace PathSnip.Services.Snap
             double windowArea = Math.Max(1, windowBounds.Width * windowBounds.Height);
             double elementArea = Math.Max(1, elementBounds.Width * elementBounds.Height);
             double areaRatio = elementArea / windowArea;
-            if (areaRatio > MaxElementAreaRatio)
+            double maxAreaRatio = appProfile == SnapAppProfile.Explorer ? ExplorerMaxElementAreaRatio : MaxElementAreaRatio;
+            if (areaRatio > maxAreaRatio)
             {
+                reason = "too_large";
                 return true;
             }
 
@@ -50,13 +63,25 @@ namespace PathSnip.Services.Snap
                 double height = Math.Max(1, elementBounds.Height);
                 double aspectRatio = width >= height ? width / height : height / width;
 
-                if (areaRatio >= EmptyLabelMinAreaRatio && areaRatio <= EmptyLabelMaxAreaRatio)
+                if (areaRatio <= TinyEmptyLabelAreaRatio)
                 {
+                    reason = "empty_tiny";
                     return true;
                 }
 
-                if (aspectRatio >= ExtremeAspectRatio)
+                double emptyMinAreaRatio = appProfile == SnapAppProfile.Explorer ? ExplorerEmptyLabelMinAreaRatio : EmptyLabelMinAreaRatio;
+                double emptyMaxAreaRatio = appProfile == SnapAppProfile.Explorer ? ExplorerEmptyLabelMaxAreaRatio : EmptyLabelMaxAreaRatio;
+                double maxAspectRatio = appProfile == SnapAppProfile.Explorer ? ExplorerExtremeAspectRatio : ExtremeAspectRatio;
+
+                if (areaRatio >= emptyMinAreaRatio && areaRatio <= emptyMaxAreaRatio)
                 {
+                    reason = "empty_container";
+                    return true;
+                }
+
+                if (aspectRatio >= maxAspectRatio)
+                {
+                    reason = "empty_extreme_aspect";
                     return true;
                 }
             }

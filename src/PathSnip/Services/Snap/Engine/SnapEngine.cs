@@ -191,6 +191,8 @@ namespace PathSnip.Services.Snap
         {
             lock (_policySync)
             {
+                SnapAppProfile appProfile = ResolveAppProfile(windowSnap.WindowHandle);
+
                 if (HasWindowContextChanged(windowSnap))
                 {
                     _stabilizer.Reset();
@@ -199,15 +201,17 @@ namespace PathSnip.Services.Snap
 
                 _lastWindowBounds = windowSnap.Bounds;
 
-                if (_ignorePolicy.ShouldIgnore(windowSnap, candidate))
+                string ignoreReason;
+                if (_ignorePolicy.ShouldIgnore(windowSnap, candidate, appProfile, out ignoreReason))
                 {
-                    LogService.LogWarn("snap.candidates.ignored", $"provider={providerName} source={candidate.Source}", operationId, "policy.ignore");
+                    LogService.LogWarn("snap.candidates.ignored", $"provider={providerName} source={candidate.Source} profile={appProfile} reason={ignoreReason}", operationId, "policy.ignore");
                     return SnapResult.None;
                 }
 
-                if (!_rankingPolicy.ShouldUseElement(windowSnap, candidate, cursorPoint, _lastAcceptedElement))
+                string rankReason;
+                if (!_rankingPolicy.ShouldUseElement(windowSnap, candidate, cursorPoint, _lastAcceptedElement, appProfile, out rankReason))
                 {
-                    LogService.LogWarn("snap.candidates.rejected", $"provider={providerName} source={candidate.Source}", operationId, "policy.rank");
+                    LogService.LogWarn("snap.candidates.rejected", $"provider={providerName} source={candidate.Source} profile={appProfile} reason={rankReason}", operationId, "policy.rank");
                     return SnapResult.None;
                 }
 
@@ -221,6 +225,71 @@ namespace PathSnip.Services.Snap
                 _lastAcceptedElement = stabilized;
                 LogService.LogInfo("snap.stabilizer.switch", $"provider={providerName} source={stabilized.Source}", operationId, "policy.stabilizer");
                 return stabilized;
+            }
+        }
+
+        private static SnapAppProfile ResolveAppProfile(IntPtr? windowHandle)
+        {
+            string processName = ResolveProcessName(windowHandle);
+            if (string.IsNullOrWhiteSpace(processName))
+            {
+                return SnapAppProfile.Generic;
+            }
+
+            string normalized = processName.ToLowerInvariant();
+            if (normalized == "explorer")
+            {
+                return SnapAppProfile.Explorer;
+            }
+
+            if (normalized.Contains("chrome")
+                || normalized.Contains("msedge")
+                || normalized.Contains("edge")
+                || normalized.Contains("firefox")
+                || normalized.Contains("opera")
+                || normalized.Contains("brave")
+                || normalized.Contains("vivaldi")
+                || normalized.Contains("electron"))
+            {
+                return SnapAppProfile.Browser;
+            }
+
+            if (normalized == "code"
+                || normalized.Contains("devenv")
+                || normalized.Contains("rider")
+                || normalized.Contains("idea")
+                || normalized.Contains("pycharm"))
+            {
+                return SnapAppProfile.Ide;
+            }
+
+            return SnapAppProfile.Generic;
+        }
+
+        private static string ResolveProcessName(IntPtr? windowHandle)
+        {
+            if (!windowHandle.HasValue || windowHandle.Value == IntPtr.Zero)
+            {
+                return string.Empty;
+            }
+
+            uint processId;
+            if (!TryGetWindowProcessId(windowHandle.Value, out processId))
+            {
+                return string.Empty;
+            }
+
+            try
+            {
+                return Process.GetProcessById((int)processId).ProcessName ?? string.Empty;
+            }
+            catch (ArgumentException)
+            {
+                return string.Empty;
+            }
+            catch (InvalidOperationException)
+            {
+                return string.Empty;
             }
         }
 
@@ -259,31 +328,7 @@ namespace PathSnip.Services.Snap
 
         private static bool IsMsaaPreferred(IntPtr? windowHandle)
         {
-            if (!windowHandle.HasValue || windowHandle.Value == IntPtr.Zero)
-            {
-                return false;
-            }
-
-            uint processId;
-            if (!TryGetWindowProcessId(windowHandle.Value, out processId))
-            {
-                return false;
-            }
-
-            string processName;
-            try
-            {
-                Process process = Process.GetProcessById((int)processId);
-                processName = process.ProcessName;
-            }
-            catch (ArgumentException)
-            {
-                return false;
-            }
-            catch (InvalidOperationException)
-            {
-                return false;
-            }
+            string processName = ResolveProcessName(windowHandle);
 
             if (string.IsNullOrWhiteSpace(processName))
             {
