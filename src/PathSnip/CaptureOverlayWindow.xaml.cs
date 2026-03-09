@@ -94,6 +94,10 @@ namespace PathSnip
         private const int ElementLockGraceMs = 120;
         private const double ElementExitTolerancePx = 8;
         private const double FastPointerSpeedThreshold = 900;
+        private readonly bool _enableSmartSnap;
+        private readonly SmartSnapMode _smartSnapMode;
+        private readonly bool _enableElementSnap;
+        private readonly bool _holdAltToBypassSnap;
         private bool _isSnapBypassedByAlt;
         private SnapIntentMode _snapIntentMode = SnapIntentMode.WindowLock;
         private DateTime _elementLockUntil = DateTime.MinValue;
@@ -137,6 +141,12 @@ namespace PathSnip
 
             // 初始化当前进程ID（用于过滤自身窗口）
             _currentProcessId = WindowDetectionService.GetCurrentProcessId();
+
+            var config = ConfigService.Instance;
+            _enableSmartSnap = config.EnableSmartSnap;
+            _smartSnapMode = config.SmartSnapMode;
+            _enableElementSnap = config.EnableElementSnap;
+            _holdAltToBypassSnap = config.HoldAltToBypassSnap;
 
             // 设置背景图
             BackgroundImage.Source = background;
@@ -379,6 +389,19 @@ namespace PathSnip
             // 窗口吸附检测 + 放大镜更新（仅在未开始框选时）
             if (!_selectionSession.IsSelecting && !_selectionCompleted)
             {
+                if (!_enableSmartSnap || _smartSnapMode == SmartSnapMode.ManualOnly)
+                {
+                    if (WindowHighlightRect != null)
+                    {
+                        WindowHighlightRect.Visibility = Visibility.Collapsed;
+                    }
+
+                    StopElementSnapUpgrade();
+                    _currentSnapResult = SnapResult.None;
+                    MagnifierUI.Visibility = Visibility.Visible;
+                    return;
+                }
+
                 if (_isSnapBypassedByAlt)
                 {
                     if (WindowHighlightRect != null)
@@ -399,7 +422,14 @@ namespace PathSnip
                     UpdateSnapTargetUnderCursor(e, requestVersion, now, cursorScreenPoint);
                 }
 
-                ScheduleElementSnapUpgrade(mousePos, cursorScreenPoint, now);
+                if (_smartSnapMode != SmartSnapMode.WindowOnly && _enableElementSnap)
+                {
+                    ScheduleElementSnapUpgrade(mousePos, cursorScreenPoint, now);
+                }
+                else
+                {
+                    StopElementSnapUpgrade();
+                }
 
                 // 显式恢复放大镜的可见性
                 MagnifierUI.Visibility = Visibility.Visible;
@@ -482,6 +512,13 @@ namespace PathSnip
                 return;
             }
 
+            if (!_enableSmartSnap || !_enableElementSnap || _smartSnapMode == SmartSnapMode.WindowOnly || _smartSnapMode == SmartSnapMode.ManualOnly)
+            {
+                _elementSnapHoverTimer.Stop();
+                CancelElementSnapRequest();
+                return;
+            }
+
             if (IsFastPointerMotion())
             {
                 _snapIntentMode = SnapIntentMode.WindowLock;
@@ -520,6 +557,11 @@ namespace PathSnip
             _elementSnapHoverTimer.Stop();
 
             if (_selectionSession.IsSelecting || _selectionCompleted)
+            {
+                return;
+            }
+
+            if (!_enableSmartSnap || !_enableElementSnap || _smartSnapMode == SmartSnapMode.WindowOnly || _smartSnapMode == SmartSnapMode.ManualOnly || _isSnapBypassedByAlt)
             {
                 return;
             }
@@ -1393,12 +1435,15 @@ namespace PathSnip
 
         private bool CanHandleCycleShortcut()
         {
-            return !_selectionCompleted && !_selectionSession.IsSelecting;
+            return !_selectionCompleted
+                && !_selectionSession.IsSelecting
+                && _enableSmartSnap
+                && _smartSnapMode != SmartSnapMode.ManualOnly;
         }
 
         private bool CanHandleBypassShortcut()
         {
-            return !_selectionCompleted;
+            return !_selectionCompleted && _holdAltToBypassSnap;
         }
 
         private async Task<bool> ExecuteShortcutActionAsync(OverlayShortcutAction action)
@@ -1448,6 +1493,11 @@ namespace PathSnip
                 return false;
             }
 
+            if (!_enableSmartSnap || _smartSnapMode == SmartSnapMode.ManualOnly)
+            {
+                return false;
+            }
+
             if (_lastPointerMoveAt == DateTime.MinValue)
             {
                 return false;
@@ -1469,6 +1519,11 @@ namespace PathSnip
             }
 
             if (!forward)
+            {
+                return false;
+            }
+
+            if (!_enableElementSnap || _smartSnapMode == SmartSnapMode.WindowOnly)
             {
                 return false;
             }

@@ -64,6 +64,26 @@ namespace PathSnip
 
             // 文件名模板
             FileNameTemplateTextBox.Text = config.FileNameTemplate;
+
+            EnableSmartSnapCheckBox.IsChecked = config.EnableSmartSnap;
+            EnableElementSnapCheckBox.IsChecked = config.EnableElementSnap;
+            HoldAltToBypassSnapCheckBox.IsChecked = config.HoldAltToBypassSnap;
+
+            switch (config.SmartSnapMode)
+            {
+                case SmartSnapMode.WindowOnly:
+                    SmartSnapModeComboBox.SelectedIndex = 1;
+                    break;
+                case SmartSnapMode.ElementPreferred:
+                    SmartSnapModeComboBox.SelectedIndex = 2;
+                    break;
+                case SmartSnapMode.ManualOnly:
+                    SmartSnapModeComboBox.SelectedIndex = 3;
+                    break;
+                default:
+                    SmartSnapModeComboBox.SelectedIndex = 0;
+                    break;
+            }
         }
 
         private void HotkeyTextBox_PreviewKeyDown(object sender, System.Windows.Input.KeyEventArgs e)
@@ -175,6 +195,10 @@ namespace PathSnip
             ClipboardModeComboBox.SelectedIndex = 0;  // 仅路径
             PathFormatComboBox.SelectedIndex = 0;      // 纯文本
             FileNameTemplateTextBox.Text = "{yyyy}-{MM}-{dd}_{HHmmss}";
+            EnableSmartSnapCheckBox.IsChecked = true;
+            SmartSnapModeComboBox.SelectedIndex = 0;
+            EnableElementSnapCheckBox.IsChecked = true;
+            HoldAltToBypassSnapCheckBox.IsChecked = true;
 
             System.Windows.MessageBox.Show("设置已重置为默认值，请点击\"保存设置\"生效。", "PathSnip", MessageBoxButton.OK, MessageBoxImage.Information);
         }
@@ -285,6 +309,27 @@ namespace PathSnip
 
                 // 保存文件名模板
                 config.FileNameTemplate = template;
+
+                config.EnableSmartSnap = EnableSmartSnapCheckBox.IsChecked == true;
+                config.EnableElementSnap = EnableElementSnapCheckBox.IsChecked == true;
+                config.HoldAltToBypassSnap = HoldAltToBypassSnapCheckBox.IsChecked == true;
+
+                var snapModeTag = (SmartSnapModeComboBox.SelectedItem as System.Windows.Controls.ComboBoxItem).Tag.ToString();
+                switch (snapModeTag)
+                {
+                    case "WindowOnly":
+                        config.SmartSnapMode = SmartSnapMode.WindowOnly;
+                        break;
+                    case "ElementPreferred":
+                        config.SmartSnapMode = SmartSnapMode.ElementPreferred;
+                        break;
+                    case "ManualOnly":
+                        config.SmartSnapMode = SmartSnapMode.ManualOnly;
+                        break;
+                    default:
+                        config.SmartSnapMode = SmartSnapMode.Auto;
+                        break;
+                }
 
                 config.Save();
 

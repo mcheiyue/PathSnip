@@ -11,6 +11,14 @@ namespace PathSnip.Services
         ImageAndPath
     }
 
+    public enum SmartSnapMode
+    {
+        Auto,
+        WindowOnly,
+        ElementPreferred,
+        ManualOnly
+    }
+
     public class AppConfig
     {
         public string HotkeyModifiers { get; set; } = "Ctrl+Shift";
@@ -20,6 +28,10 @@ namespace PathSnip.Services
         public ClipboardMode ClipboardMode { get; set; } = ClipboardMode.PathOnly;
         public string PathFormat { get; set; } = "Text";
         public string FileNameTemplate { get; set; } = "{yyyy}-{MM}-{dd}_{HHmmss}";
+        public bool EnableSmartSnap { get; set; } = true;
+        public SmartSnapMode SmartSnapMode { get; set; } = SmartSnapMode.Auto;
+        public bool EnableElementSnap { get; set; } = true;
+        public bool HoldAltToBypassSnap { get; set; } = true;
     }
 
     public class ConfigService
@@ -40,6 +52,10 @@ namespace PathSnip.Services
         public ClipboardMode ClipboardMode { get; set; }
         public string PathFormat { get; set; }
         public string FileNameTemplate { get; set; }
+        public bool EnableSmartSnap { get; set; }
+        public SmartSnapMode SmartSnapMode { get; set; }
+        public bool EnableElementSnap { get; set; }
+        public bool HoldAltToBypassSnap { get; set; }
 
         private ConfigService()
         {
@@ -89,6 +105,10 @@ namespace PathSnip.Services
             ClipboardMode = _config.ClipboardMode;
             PathFormat = string.IsNullOrEmpty(_config.PathFormat) ? "Text" : _config.PathFormat;
             FileNameTemplate = string.IsNullOrEmpty(_config.FileNameTemplate) ? "{yyyy}-{MM}-{dd}_{HHmmss}" : _config.FileNameTemplate;
+            EnableSmartSnap = _config.EnableSmartSnap;
+            SmartSnapMode = _config.SmartSnapMode;
+            EnableElementSnap = _config.EnableElementSnap;
+            HoldAltToBypassSnap = _config.HoldAltToBypassSnap;
         }
 
         public void Save()
@@ -102,6 +122,10 @@ namespace PathSnip.Services
                 _config.ClipboardMode = ClipboardMode;
                 _config.PathFormat = PathFormat;
                 _config.FileNameTemplate = FileNameTemplate;
+                _config.EnableSmartSnap = EnableSmartSnap;
+                _config.SmartSnapMode = SmartSnapMode;
+                _config.EnableElementSnap = EnableElementSnap;
+                _config.HoldAltToBypassSnap = HoldAltToBypassSnap;
 
                 var json = JsonConvert.SerializeObject(_config, Formatting.Indented);
                 File.WriteAllText(_configPath, json);

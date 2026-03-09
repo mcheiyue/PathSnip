@@ -440,7 +440,45 @@
                         </ComboBox>
                     </Grid>
                 </GroupBox>
-                
+
+                <GroupBox Header="智能吸附" Tag="&#xE7B3;">
+                    <Grid>
+                        <Grid.RowDefinitions>
+                            <RowDefinition Height="Auto"/>
+                            <RowDefinition Height="12"/>
+                            <RowDefinition Height="Auto"/>
+                            <RowDefinition Height="12"/>
+                            <RowDefinition Height="Auto"/>
+                            <RowDefinition Height="12"/>
+                            <RowDefinition Height="Auto"/>
+                        </Grid.RowDefinitions>
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="120"/>
+                            <ColumnDefinition Width="*"/>
+                        </Grid.ColumnDefinitions>
+
+                        <CheckBox Grid.Row="0" Grid.Column="1" x:Name="EnableSmartSnapCheckBox"
+                                  Content="启用智能吸附"
+                                  Style="{StaticResource ToggleSwitchStyle}"/>
+
+                        <TextBlock Grid.Row="2" Grid.Column="0" Text="吸附模式：" VerticalAlignment="Center" TextAlignment="Right" Margin="0,0,12,0" Foreground="#4B5563"/>
+                        <ComboBox Grid.Row="2" Grid.Column="1" x:Name="SmartSnapModeComboBox" SelectedIndex="0">
+                            <ComboBoxItem Content="自动（推荐）" Tag="Auto"/>
+                            <ComboBoxItem Content="仅窗口" Tag="WindowOnly"/>
+                            <ComboBoxItem Content="优先元素" Tag="ElementPreferred"/>
+                            <ComboBoxItem Content="仅手动框选" Tag="ManualOnly"/>
+                        </ComboBox>
+
+                        <CheckBox Grid.Row="4" Grid.Column="1" x:Name="EnableElementSnapCheckBox"
+                                  Content="启用元素级吸附"
+                                  Style="{StaticResource ToggleSwitchStyle}"/>
+
+                        <CheckBox Grid.Row="6" Grid.Column="1" x:Name="HoldAltToBypassSnapCheckBox"
+                                  Content="按住 Alt 临时绕过吸附"
+                                  Style="{StaticResource ToggleSwitchStyle}"/>
+                    </Grid>
+                </GroupBox>
+                 
                 <GroupBox Header="系统设置" Tag="&#xE713;">
                     <Grid>
                         <Grid.RowDefinitions>
