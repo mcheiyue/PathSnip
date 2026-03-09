@@ -95,6 +95,7 @@ namespace PathSnip
         private const int ElementLockGraceMs = 120;
         private const double ElementExitTolerancePx = 8;
         private const double FastPointerSpeedThreshold = 900;
+        private const double ElementPromotionSpeedThreshold = 260;
         private readonly bool _enableSmartSnap;
         private readonly SmartSnapMode _smartSnapMode;
         private readonly bool _enableElementSnap;
@@ -542,7 +543,7 @@ namespace PathSnip
                 return;
             }
 
-            if (IsFastPointerMotion())
+            if (IsFastPointerMotion() || !CanPromoteToElement())
             {
                 _snapIntentMode = SnapIntentMode.WindowLock;
                 _elementSnapHoverTimer.Stop();
@@ -594,7 +595,7 @@ namespace PathSnip
                 return;
             }
 
-            if (IsFastPointerMotion())
+            if (IsFastPointerMotion() || !CanPromoteToElement())
             {
                 return;
             }
@@ -1698,6 +1699,11 @@ namespace PathSnip
         private bool IsFastPointerMotion()
         {
             return _pointerSpeedPxPerSecond >= FastPointerSpeedThreshold;
+        }
+
+        private bool CanPromoteToElement()
+        {
+            return _pointerSpeedPxPerSecond <= ElementPromotionSpeedThreshold;
         }
 
         private bool ShouldKeepElementLock(Point cursorScreenPoint, DateTime now)

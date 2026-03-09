@@ -35,9 +35,9 @@ namespace PathSnip.Services.Snap
             double elementArea = Math.Max(1, elementBounds.Width * elementBounds.Height);
             double areaRatio = elementArea / windowArea;
 
-            double quickPassMinAreaRatio = appProfile == SnapAppProfile.Explorer ? 0.002 :
-                                           appProfile == SnapAppProfile.Ide ? 0.003 :
-                                           appProfile == SnapAppProfile.Browser ? 0.004 : 0.005;
+            double quickPassMinAreaRatio = appProfile == SnapAppProfile.Explorer ? 0.0035 :
+                                           appProfile == SnapAppProfile.Ide ? 0.0032 :
+                                           appProfile == SnapAppProfile.Browser ? 0.0038 : 0.0045;
 
             if (elementBounds.Contains(cursorPoint) && areaRatio >= quickPassMinAreaRatio && areaRatio <= 0.92)
             {
@@ -76,17 +76,17 @@ namespace PathSnip.Services.Snap
             double areaRatio = elementArea / windowArea;
 
             double sizeWeight;
-            if (areaRatio <= 0.015)
+            if (areaRatio <= 0.02)
             {
-                sizeWeight = appProfile == SnapAppProfile.Explorer ? 10 : 6;
+                sizeWeight = appProfile == SnapAppProfile.Explorer ? 2 : 4;
             }
-            else if (areaRatio <= 0.55)
+            else if (areaRatio <= 0.6)
             {
-                sizeWeight = 15;
+                sizeWeight = appProfile == SnapAppProfile.Explorer ? 17 : 15;
             }
-            else if (areaRatio <= 0.75)
+            else if (areaRatio <= 0.8)
             {
-                sizeWeight = 10;
+                sizeWeight = 11;
             }
             else
             {
@@ -108,7 +108,7 @@ namespace PathSnip.Services.Snap
         private static double ScoreWindow(SnapResult windowSnap, Point cursorPoint, SnapAppProfile appProfile)
         {
             Rect windowBounds = windowSnap.Bounds.Value;
-            double baseScore = appProfile == SnapAppProfile.Explorer ? 24 :
+            double baseScore = appProfile == SnapAppProfile.Explorer ? 27 :
                                appProfile == SnapAppProfile.Browser ? 26 :
                                appProfile == SnapAppProfile.Ide ? 27 : 28;
             double cursorFitWeight = windowBounds.Contains(cursorPoint) ? 6 : 0;

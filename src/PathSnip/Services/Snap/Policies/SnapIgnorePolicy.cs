@@ -5,8 +5,12 @@ namespace PathSnip.Services.Snap
 {
     public sealed class SnapIgnorePolicy
     {
-        private const double DefaultMinElementSize = 8;
-        private const double ExplorerMinElementSize = 6;
+        private const double DefaultMinElementSize = 10;
+        private const double ExplorerMinElementSize = 12;
+        private const double DefaultMinAreaRatio = 0.0025;
+        private const double ExplorerMinAreaRatio = 0.0035;
+        private const double BrowserMinAreaRatio = 0.0030;
+        private const double IdeMinAreaRatio = 0.0028;
         private const double MaxElementAreaRatio = 0.9;
         private const double ExplorerMaxElementAreaRatio = 0.96;
         private const double EmptyLabelMinAreaRatio = 0.02;
@@ -49,6 +53,16 @@ namespace PathSnip.Services.Snap
             double windowArea = Math.Max(1, windowBounds.Width * windowBounds.Height);
             double elementArea = Math.Max(1, elementBounds.Width * elementBounds.Height);
             double areaRatio = elementArea / windowArea;
+
+            double minAreaRatio = appProfile == SnapAppProfile.Explorer ? ExplorerMinAreaRatio :
+                                  appProfile == SnapAppProfile.Browser ? BrowserMinAreaRatio :
+                                  appProfile == SnapAppProfile.Ide ? IdeMinAreaRatio : DefaultMinAreaRatio;
+            if (areaRatio < minAreaRatio)
+            {
+                reason = "too_small_area";
+                return true;
+            }
+
             double maxAreaRatio = appProfile == SnapAppProfile.Explorer ? ExplorerMaxElementAreaRatio : MaxElementAreaRatio;
             if (areaRatio > maxAreaRatio)
             {
