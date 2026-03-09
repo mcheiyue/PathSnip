@@ -1,4 +1,5 @@
 using System;
+using System.Diagnostics;
 using System.Runtime.InteropServices;
 using System.Windows;
 
@@ -7,6 +8,7 @@ namespace PathSnip.Services.Snap
     public sealed class RegionSnapProvider
     {
         private const int DwmaExtendedFrameBounds = 9;
+        private const double MinRegionAreaRatio = 0.02;
 
         public SnapResult GetCurrentRegionSnap(Point screenPoint, int currentProcessId, SnapResult windowSnap)
         {
@@ -24,6 +26,12 @@ namespace PathSnip.Services.Snap
             Rect logicalWindowBounds = windowSnap.Bounds.Value;
             Rect physicalWindowBounds;
             if (!TryGetPhysicalWindowBounds(windowHandle, out physicalWindowBounds))
+            {
+                return SnapResult.None;
+            }
+
+            Rect physicalClientBounds;
+            if (!TryGetClientBounds(windowHandle, out physicalClientBounds))
             {
                 return SnapResult.None;
             }
@@ -55,17 +63,19 @@ namespace PathSnip.Services.Snap
                     return SnapResult.None;
                 }
 
-                physicalRegionBounds = new Rect(rect.Left, rect.Top, rect.Right - rect.Left, rect.Bottom - rect.Top);
+                var hitBounds = new Rect(rect.Left, rect.Top, rect.Right - rect.Left, rect.Bottom - rect.Top);
+                if (!IsMeaningfulRegion(hitBounds, physicalClientBounds))
+                {
+                    physicalRegionBounds = physicalClientBounds;
+                }
+                else
+                {
+                    physicalRegionBounds = hitBounds;
+                }
             }
             else
             {
-                Rect clientBounds;
-                if (!TryGetClientBounds(windowHandle, out clientBounds))
-                {
-                    return SnapResult.None;
-                }
-
-                physicalRegionBounds = clientBounds;
+                physicalRegionBounds = physicalClientBounds;
             }
 
             Rect logicalRegionBounds = new Rect(
@@ -79,15 +89,120 @@ namespace PathSnip.Services.Snap
                 return SnapResult.None;
             }
 
+            RegionKind regionKind = ClassifyRegionKind(windowHandle, physicalRegionBounds, physicalClientBounds);
+
             RegionCandidate regionCandidate = new RegionCandidate(
                 logicalRegionBounds,
                 string.Empty,
-                RegionKind.Unknown,
+                regionKind,
                 SnapSource.WindowDetection,
                 0.7,
                 windowHandle);
 
             return SnapResult.FromRegion(regionCandidate);
+        }
+
+        private static bool IsMeaningfulRegion(Rect physicalRegionBounds, Rect physicalClientBounds)
+        {
+            if (physicalClientBounds.IsEmpty || physicalClientBounds.Width <= 0 || physicalClientBounds.Height <= 0)
+            {
+                return false;
+            }
+
+            if (physicalRegionBounds.IsEmpty || physicalRegionBounds.Width <= 0 || physicalRegionBounds.Height <= 0)
+            {
+                return false;
+            }
+
+            double clientArea = Math.Max(1, physicalClientBounds.Width * physicalClientBounds.Height);
+            double regionArea = Math.Max(1, physicalRegionBounds.Width * physicalRegionBounds.Height);
+            double ratio = regionArea / clientArea;
+            return ratio >= MinRegionAreaRatio;
+        }
+
+        private static RegionKind ClassifyRegionKind(IntPtr windowHandle, Rect physicalRegionBounds, Rect physicalClientBounds)
+        {
+            string processName = ResolveProcessName(windowHandle);
+            if (!string.Equals(processName, "explorer", StringComparison.OrdinalIgnoreCase))
+            {
+                return RegionKind.Unknown;
+            }
+
+            if (physicalClientBounds.IsEmpty)
+            {
+                return RegionKind.Unknown;
+            }
+
+            double cx = physicalClientBounds.Left;
+            double cy = physicalClientBounds.Top;
+            double cw = Math.Max(1, physicalClientBounds.Width);
+            double ch = Math.Max(1, physicalClientBounds.Height);
+
+            double rx = physicalRegionBounds.Left;
+            double ry = physicalRegionBounds.Top;
+            double rw = Math.Max(1, physicalRegionBounds.Width);
+            double rh = Math.Max(1, physicalRegionBounds.Height);
+
+            double wRatio = rw / cw;
+            double hRatio = rh / ch;
+            double leftRatio = (rx - cx) / cw;
+            double topRatio = (ry - cy) / ch;
+
+            if (leftRatio <= 0.02 && wRatio <= 0.38 && hRatio >= 0.5)
+            {
+                return RegionKind.NavigationPane;
+            }
+
+            if (leftRatio >= 0.62 && wRatio <= 0.38 && hRatio >= 0.5)
+            {
+                return RegionKind.PreviewPane;
+            }
+
+            if (topRatio <= 0.2 && hRatio <= 0.28 && wRatio >= 0.6)
+            {
+                return RegionKind.PathBar;
+            }
+
+            return RegionKind.ContentPane;
+        }
+
+        private static string ResolveProcessName(IntPtr windowHandle)
+        {
+            uint processId;
+            if (!TryGetWindowProcessId(windowHandle, out processId))
+            {
+                return string.Empty;
+            }
+
+            try
+            {
+                return Process.GetProcessById((int)processId).ProcessName ?? string.Empty;
+            }
+            catch (ArgumentException)
+            {
+                return string.Empty;
+            }
+            catch (InvalidOperationException)
+            {
+                return string.Empty;
+            }
+        }
+
+        [DllImport("user32.dll")]
+        private static extern uint GetWindowThreadProcessId(IntPtr hWnd, out uint lpdwProcessId);
+
+        private static bool TryGetWindowProcessId(IntPtr hWnd, out uint processId)
+        {
+            processId = 0;
+            uint value = 0;
+            GetWindowThreadProcessId(hWnd, out value);
+            if (value == 0)
+            {
+                return false;
+            }
+
+            processId = value;
+            return true;
         }
 
         private static IntPtr ResolveRegionHwnd(IntPtr topWindowHandle, Point physicalPoint)

@@ -84,8 +84,13 @@ namespace PathSnip
         // 窗口吸附相关变量
         private DateTime _lastWindowDetectionTime = DateTime.MinValue;
         private readonly int _currentProcessId;
-        private readonly SnapEngine _snapEngine = new SnapEngine(new ISnapProvider[] { new WindowSnapProvider() }, new UiaSnapProvider(), new MsaaSnapProvider());
+        private readonly SnapEngine _snapEngine = new SnapEngine(
+            new ISnapProvider[] { new WindowSnapProvider() },
+            new UiaSnapProvider(),
+            new MsaaSnapProvider(),
+            new RegionSnapProvider());
         private SnapResult _currentSnapResult = SnapResult.None;
+        private SnapResult _currentWindowSnap = SnapResult.None;
         private readonly DispatcherTimer _elementSnapHoverTimer;
         private CancellationTokenSource _elementSnapCts;
         private Point _lastHoverMousePosition;
@@ -257,6 +262,7 @@ namespace PathSnip
             StopElementSnapUpgrade();
             _selectionSession.Reset();
             _currentSnapResult = SnapResult.None;
+            _currentWindowSnap = SnapResult.None;
             _isSnapBypassedByAlt = false;
             _snapIntentMode = SnapIntentMode.WindowLock;
             _selectionCompleted = false;
@@ -304,6 +310,7 @@ namespace PathSnip
             StopElementSnapUpgrade();
             _selectionSession.Reset();
             _currentSnapResult = SnapResult.None;
+            _currentWindowSnap = SnapResult.None;
             _isSnapBypassedByAlt = false;
             _snapIntentMode = SnapIntentMode.WindowLock;
             _selectionCompleted = false;
@@ -489,7 +496,25 @@ namespace PathSnip
                 return;
             }
 
-            SnapResult snapResult = _snapEngine.GetCurrentSnap(cursorScreenPoint, _currentProcessId);
+            SnapResult windowSnap = _snapEngine.GetCurrentSnap(cursorScreenPoint, _currentProcessId);
+            _currentWindowSnap = windowSnap;
+
+            SnapResult snapResult = windowSnap;
+            if (_enableSmartSnap && _smartSnapMode != SmartSnapMode.ManualOnly && !_isSnapBypassedByAlt)
+            {
+                SnapResult regionSnap = _snapEngine.TryGetRegionSnap(cursorScreenPoint, _currentProcessId, windowSnap);
+                if (regionSnap.IsValid && regionSnap.Bounds.HasValue && windowSnap.IsValid && windowSnap.Bounds.HasValue)
+                {
+                    double windowArea = Math.Max(1, windowSnap.Bounds.Value.Width * windowSnap.Bounds.Value.Height);
+                    double regionArea = Math.Max(1, regionSnap.Bounds.Value.Width * regionSnap.Bounds.Value.Height);
+                    double areaRatio = regionArea / windowArea;
+
+                    if (!IsFastPointerMotion() && areaRatio <= 0.98)
+                    {
+                        snapResult = regionSnap;
+                    }
+                }
+            }
 
             if (!_snapEngine.IsCurrentWindowRequest(requestVersion))
             {
@@ -497,8 +522,8 @@ namespace PathSnip
             }
 
             if (_currentSnapResult.IsValid && _currentSnapResult.Kind == SnapKind.Element &&
-                snapResult.IsValid && snapResult.Kind == SnapKind.Window &&
-                IsSameWindow(_currentSnapResult, snapResult) &&
+                windowSnap.IsValid && windowSnap.Kind == SnapKind.Window &&
+                IsSameWindow(_currentSnapResult, windowSnap) &&
                 !IsFastPointerMotion())
             {
                 _snapIntentMode = SnapIntentMode.ElementProbe;
@@ -608,7 +633,7 @@ namespace PathSnip
                 return;
             }
 
-            if (!_currentSnapResult.IsValid || !_currentSnapResult.Bounds.HasValue)
+            if (!_currentWindowSnap.IsValid || !_currentWindowSnap.Bounds.HasValue)
             {
                 return;
             }
@@ -627,7 +652,7 @@ namespace PathSnip
                 SnapResult upgradedSnap = await _snapEngine.TryGetElementSnapAsync(
                     screenPos,
                     _currentProcessId,
-                    _currentSnapResult,
+                    _currentWindowSnap,
                     requestVersion,
                     ElementSnapTimeoutMs,
                     currentCts.Token,
@@ -1568,6 +1593,7 @@ namespace PathSnip
                     return false;
                 }
 
+                _currentWindowSnap = windowSnap;
                 _currentSnapResult = windowSnap;
                 ApplySnapHighlight(_currentSnapResult);
                 return true;
@@ -1585,18 +1611,32 @@ namespace PathSnip
 
             if (!_currentSnapResult.IsValid)
             {
-                _currentSnapResult = _snapEngine.GetCurrentSnap(screenPoint, _currentProcessId);
-                if (!_currentSnapResult.IsValid)
+                SnapResult windowSnap = _snapEngine.GetCurrentSnap(screenPoint, _currentProcessId);
+                if (!windowSnap.IsValid)
                 {
                     return false;
                 }
+
+                _currentWindowSnap = windowSnap;
+                _currentSnapResult = windowSnap;
+            }
+
+            if (!_currentWindowSnap.IsValid)
+            {
+                SnapResult windowSnap = _snapEngine.GetCurrentSnap(screenPoint, _currentProcessId);
+                if (!windowSnap.IsValid)
+                {
+                    return false;
+                }
+
+                _currentWindowSnap = windowSnap;
             }
 
             long requestVersion = _snapEngine.NextElementRequestVersion();
             SnapResult upgradedSnap = await _snapEngine.TryGetElementSnapAsync(
                 screenPoint,
                 _currentProcessId,
-                _currentSnapResult,
+                _currentWindowSnap,
                 requestVersion,
                 ElementSnapTimeoutMs,
                 CancellationToken.None,
@@ -1662,6 +1702,7 @@ namespace PathSnip
             StopElementSnapUpgrade();
             _selectionSession.Reset();
             _currentSnapResult = SnapResult.None;
+            _currentWindowSnap = SnapResult.None;
             _isSnapBypassedByAlt = false;
             _snapIntentMode = SnapIntentMode.WindowLock;
             SelectionRect.Visibility = Visibility.Collapsed;
