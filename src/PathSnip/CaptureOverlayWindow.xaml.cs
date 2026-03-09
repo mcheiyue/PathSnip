@@ -94,6 +94,7 @@ namespace PathSnip
         private const int ElementLockGraceMs = 120;
         private const double ElementExitTolerancePx = 8;
         private const double FastPointerSpeedThreshold = 900;
+        private bool _isSnapBypassedByAlt;
         private SnapIntentMode _snapIntentMode = SnapIntentMode.WindowLock;
         private DateTime _elementLockUntil = DateTime.MinValue;
         private DateTime _lastPointerMoveAt = DateTime.MinValue;
@@ -240,6 +241,7 @@ namespace PathSnip
             StopElementSnapUpgrade();
             _selectionSession.Reset();
             _currentSnapResult = SnapResult.None;
+            _isSnapBypassedByAlt = false;
             _snapIntentMode = SnapIntentMode.WindowLock;
             _selectionCompleted = false;
             _hasStartedSelection = false;
@@ -286,6 +288,7 @@ namespace PathSnip
             StopElementSnapUpgrade();
             _selectionSession.Reset();
             _currentSnapResult = SnapResult.None;
+            _isSnapBypassedByAlt = false;
             _snapIntentMode = SnapIntentMode.WindowLock;
             _selectionCompleted = false;
             _hasStartedSelection = false;
@@ -376,6 +379,18 @@ namespace PathSnip
             // 窗口吸附检测 + 放大镜更新（仅在未开始框选时）
             if (!_selectionSession.IsSelecting && !_selectionCompleted)
             {
+                if (_isSnapBypassedByAlt)
+                {
+                    if (WindowHighlightRect != null)
+                    {
+                        WindowHighlightRect.Visibility = Visibility.Collapsed;
+                    }
+
+                    _currentSnapResult = SnapResult.None;
+                    MagnifierUI.Visibility = Visibility.Visible;
+                    return;
+                }
+
                 // 窗口吸附检测（50ms 节流）
                 if ((now - _lastWindowDetectionTime).TotalMilliseconds >= 50)
                 {
@@ -1324,8 +1339,19 @@ namespace PathSnip
                 e.Key,
                 e.ImeProcessedKey,
                 CanHandlePinShortcut(),
-                CanHandleColorCopyShortcut());
+                CanHandleColorCopyShortcut(),
+                CanHandleCycleShortcut(),
+                CanHandleBypassShortcut());
 
+            if (await ExecuteShortcutActionAsync(action))
+            {
+                e.Handled = true;
+            }
+        }
+
+        private async void Window_KeyUp(object sender, KeyEventArgs e)
+        {
+            OverlayShortcutAction action = _shortcutHandler.ResolveKeyUp(e.Key, CanHandleBypassShortcut());
             if (await ExecuteShortcutActionAsync(action))
             {
                 e.Handled = true;
@@ -1365,6 +1391,16 @@ namespace PathSnip
             return !(Keyboard.FocusedElement is TextBoxBase);
         }
 
+        private bool CanHandleCycleShortcut()
+        {
+            return !_selectionCompleted && !_selectionSession.IsSelecting;
+        }
+
+        private bool CanHandleBypassShortcut()
+        {
+            return !_selectionCompleted;
+        }
+
         private async Task<bool> ExecuteShortcutActionAsync(OverlayShortcutAction action)
         {
             switch (action)
@@ -1381,9 +1417,88 @@ namespace PathSnip
                     await CopyCurrentColorAsync();
                     return true;
 
+                case OverlayShortcutAction.CycleNext:
+                    return await CycleSnapTargetAsync(true);
+
+                case OverlayShortcutAction.CyclePrevious:
+                    return await CycleSnapTargetAsync(false);
+
+                case OverlayShortcutAction.BypassOn:
+                    _isSnapBypassedByAlt = true;
+                    StopElementSnapUpgrade();
+                    if (WindowHighlightRect != null)
+                    {
+                        WindowHighlightRect.Visibility = Visibility.Collapsed;
+                    }
+                    return true;
+
+                case OverlayShortcutAction.BypassOff:
+                    _isSnapBypassedByAlt = false;
+                    return true;
+
                 default:
                     return false;
             }
+        }
+
+        private async Task<bool> CycleSnapTargetAsync(bool forward)
+        {
+            if (_selectionCompleted || _selectionSession.IsSelecting || _isSnapBypassedByAlt)
+            {
+                return false;
+            }
+
+            if (_lastPointerMoveAt == DateTime.MinValue)
+            {
+                return false;
+            }
+
+            Point screenPoint = _lastPointerScreenPoint;
+
+            if (_currentSnapResult.IsValid && _currentSnapResult.Kind == SnapKind.Element)
+            {
+                SnapResult windowSnap = _snapEngine.GetCurrentSnap(screenPoint, _currentProcessId);
+                if (!windowSnap.IsValid)
+                {
+                    return false;
+                }
+
+                _currentSnapResult = windowSnap;
+                ApplySnapHighlight(_currentSnapResult);
+                return true;
+            }
+
+            if (!forward)
+            {
+                return false;
+            }
+
+            if (!_currentSnapResult.IsValid)
+            {
+                _currentSnapResult = _snapEngine.GetCurrentSnap(screenPoint, _currentProcessId);
+                if (!_currentSnapResult.IsValid)
+                {
+                    return false;
+                }
+            }
+
+            long requestVersion = _snapEngine.NextRequestVersion();
+            SnapResult upgradedSnap = await _snapEngine.TryGetElementSnapAsync(
+                screenPoint,
+                _currentProcessId,
+                _currentSnapResult,
+                requestVersion,
+                ElementSnapTimeoutMs,
+                CancellationToken.None);
+
+            if (!_snapEngine.IsCurrentRequest(requestVersion) || !upgradedSnap.IsValid || !upgradedSnap.Bounds.HasValue)
+            {
+                return false;
+            }
+
+            _currentSnapResult = upgradedSnap;
+            ApplySnapHighlight(_currentSnapResult);
+            return true;
         }
 
         private async Task CopyCurrentColorAsync()
@@ -1436,6 +1551,7 @@ namespace PathSnip
             StopElementSnapUpgrade();
             _selectionSession.Reset();
             _currentSnapResult = SnapResult.None;
+            _isSnapBypassedByAlt = false;
             _snapIntentMode = SnapIntentMode.WindowLock;
             SelectionRect.Visibility = Visibility.Collapsed;
             SizeLabel.Visibility = Visibility.Collapsed;

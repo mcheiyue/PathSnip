@@ -8,16 +8,32 @@ namespace PathSnip.Services.Overlay
         None,
         Cancel,
         Pin,
-        CopyColor
+        CopyColor,
+        CycleNext,
+        CyclePrevious,
+        BypassOn,
+        BypassOff
     }
 
     public sealed class OverlayShortcutHandler
     {
-        public OverlayShortcutAction ResolveKeyDown(Key key, Key imeProcessedKey, bool canPin, bool canCopyColor)
+        public OverlayShortcutAction ResolveKeyDown(Key key, Key imeProcessedKey, bool canPin, bool canCopyColor, bool canCycle, bool canBypass)
         {
             if (key == Key.Escape)
             {
                 return OverlayShortcutAction.Cancel;
+            }
+
+            if (canBypass && IsBypassKey(key))
+            {
+                return OverlayShortcutAction.BypassOn;
+            }
+
+            if (canCycle && key == Key.Tab)
+            {
+                return (Keyboard.Modifiers & ModifierKeys.Shift) == ModifierKeys.Shift
+                    ? OverlayShortcutAction.CyclePrevious
+                    : OverlayShortcutAction.CycleNext;
             }
 
             if (canPin && IsPinShortcutKey(key, imeProcessedKey))
@@ -28,6 +44,16 @@ namespace PathSnip.Services.Overlay
             if (canCopyColor && IsColorCopyKey(key, imeProcessedKey))
             {
                 return OverlayShortcutAction.CopyColor;
+            }
+
+            return OverlayShortcutAction.None;
+        }
+
+        public OverlayShortcutAction ResolveKeyUp(Key key, bool canBypass)
+        {
+            if (canBypass && IsBypassKey(key))
+            {
+                return OverlayShortcutAction.BypassOff;
             }
 
             return OverlayShortcutAction.None;
@@ -56,6 +82,11 @@ namespace PathSnip.Services.Overlay
         private static bool IsPinShortcutKey(Key key, Key imeProcessedKey)
         {
             return key == Key.T || (key == Key.ImeProcessed && imeProcessedKey == Key.T);
+        }
+
+        private static bool IsBypassKey(Key key)
+        {
+            return key == Key.LeftAlt || key == Key.RightAlt || key == Key.System;
         }
     }
 }

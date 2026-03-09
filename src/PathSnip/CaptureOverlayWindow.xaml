@@ -11,6 +11,7 @@
         Cursor="Cross"
         Focusable="True"
         PreviewKeyDown="Window_KeyDown"
+        PreviewKeyUp="Window_KeyUp"
         PreviewTextInput="Window_PreviewTextInput">
     
     <Window.Resources>
