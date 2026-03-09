@@ -207,25 +207,52 @@ namespace PathSnip.Services.Snap
 
         private static IntPtr ResolveRegionHwnd(IntPtr topWindowHandle, Point physicalPoint)
         {
-            var pt = new POINT
+            var ptScreen = new POINT
             {
                 X = (int)Math.Round(physicalPoint.X),
                 Y = (int)Math.Round(physicalPoint.Y)
             };
 
-            IntPtr hit = WindowFromPoint(pt);
-            if (hit == IntPtr.Zero)
+            return ResolveDeepestChildWindowFromPoint(topWindowHandle, ptScreen);
+        }
+
+        private static IntPtr ResolveDeepestChildWindowFromPoint(IntPtr topWindowHandle, POINT ptScreen)
+        {
+            const uint CWP_SKIPINVISIBLE = 0x0001;
+            const uint CWP_SKIPDISABLED = 0x0002;
+            const uint CWP_SKIPTRANSPARENT = 0x0004;
+            const uint flags = CWP_SKIPINVISIBLE | CWP_SKIPDISABLED | CWP_SKIPTRANSPARENT;
+
+            IntPtr current = topWindowHandle;
+            for (int depth = 0; depth < 10; depth++)
             {
-                return IntPtr.Zero;
+                POINT ptClient = ptScreen;
+                if (!ScreenToClient(current, ref ptClient))
+                {
+                    break;
+                }
+
+                RECT client;
+                if (!GetClientRect(current, out client))
+                {
+                    break;
+                }
+
+                if (ptClient.X < client.Left || ptClient.Y < client.Top || ptClient.X >= client.Right || ptClient.Y >= client.Bottom)
+                {
+                    break;
+                }
+
+                IntPtr next = ChildWindowFromPointEx(current, ptClient, flags);
+                if (next == IntPtr.Zero || next == current)
+                {
+                    break;
+                }
+
+                current = next;
             }
 
-            IntPtr root = GetAncestor(hit, GA_ROOT);
-            if (root == IntPtr.Zero || root != topWindowHandle)
-            {
-                return IntPtr.Zero;
-            }
-
-            return hit;
+            return current == topWindowHandle ? IntPtr.Zero : current;
         }
 
         private static bool TryGetPhysicalWindowBounds(IntPtr hwnd, out Rect bounds)
@@ -282,8 +309,6 @@ namespace PathSnip.Services.Snap
             return scale > 0 && scale <= 4;
         }
 
-        private const uint GA_ROOT = 2;
-
         [StructLayout(LayoutKind.Sequential)]
         private struct POINT
         {
@@ -301,10 +326,10 @@ namespace PathSnip.Services.Snap
         }
 
         [DllImport("user32.dll")]
-        private static extern IntPtr WindowFromPoint(POINT point);
+        private static extern bool ScreenToClient(IntPtr hWnd, ref POINT lpPoint);
 
         [DllImport("user32.dll")]
-        private static extern IntPtr GetAncestor(IntPtr hWnd, uint gaFlags);
+        private static extern IntPtr ChildWindowFromPointEx(IntPtr hWndParent, POINT pt, uint uFlags);
 
         [DllImport("user32.dll")]
         private static extern bool GetWindowRect(IntPtr hWnd, out RECT lpRect);

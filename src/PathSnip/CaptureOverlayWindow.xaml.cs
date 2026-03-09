@@ -91,6 +91,7 @@ namespace PathSnip
             new RegionSnapProvider());
         private SnapResult _currentSnapResult = SnapResult.None;
         private SnapResult _currentWindowSnap = SnapResult.None;
+        private DateTime _lastRegionSelectLogAt = DateTime.MinValue;
         private readonly DispatcherTimer _elementSnapHoverTimer;
         private CancellationTokenSource _elementSnapCts;
         private Point _lastHoverMousePosition;
@@ -512,6 +513,15 @@ namespace PathSnip
                     if (!IsFastPointerMotion() && areaRatio <= 0.98)
                     {
                         snapResult = regionSnap;
+
+                        if ((now - _lastRegionSelectLogAt).TotalMilliseconds >= 250)
+                        {
+                            _lastRegionSelectLogAt = now;
+                            LogService.LogInfo(
+                                "snap.region.selected",
+                                $"kind={regionSnap.RegionKind} bounds=({regionSnap.Bounds?.Left:F1},{regionSnap.Bounds?.Top:F1},{regionSnap.Bounds?.Width:F1},{regionSnap.Bounds?.Height:F1}) areaRatio={areaRatio:F3}",
+                                stage: "region.select");
+                        }
                     }
                 }
             }
