@@ -14,6 +14,7 @@ namespace PathSnip.Services.Snap
         private readonly IReadOnlyList<ISnapProvider> _providers;
         private readonly UiaSnapProvider _uiaSnapProvider;
         private readonly MsaaSnapProvider _msaaSnapProvider;
+        private readonly RegionSnapProvider _regionSnapProvider;
         private readonly SnapIgnorePolicy _ignorePolicy = new SnapIgnorePolicy();
         private readonly SnapRankingPolicy _rankingPolicy = new SnapRankingPolicy();
         private readonly SnapStabilizer _stabilizer = new SnapStabilizer();
@@ -23,7 +24,11 @@ namespace PathSnip.Services.Snap
         private Rect? _lastWindowBounds;
         private SnapResult _lastAcceptedElement = SnapResult.None;
 
-        public SnapEngine(IEnumerable<ISnapProvider> providers, UiaSnapProvider uiaSnapProvider = null, MsaaSnapProvider msaaSnapProvider = null)
+        public SnapEngine(
+            IEnumerable<ISnapProvider> providers,
+            UiaSnapProvider uiaSnapProvider = null,
+            MsaaSnapProvider msaaSnapProvider = null,
+            RegionSnapProvider regionSnapProvider = null)
         {
             if (providers == null)
             {
@@ -39,6 +44,7 @@ namespace PathSnip.Services.Snap
             _providers = providerList;
             _uiaSnapProvider = uiaSnapProvider;
             _msaaSnapProvider = msaaSnapProvider;
+            _regionSnapProvider = regionSnapProvider;
         }
 
         public long NextWindowRequestVersion()
@@ -73,6 +79,16 @@ namespace PathSnip.Services.Snap
             }
 
             return SnapResult.None;
+        }
+
+        public SnapResult TryGetRegionSnap(Point screenPoint, int currentProcessId, SnapResult windowSnap)
+        {
+            if (_regionSnapProvider == null)
+            {
+                return SnapResult.None;
+            }
+
+            return _regionSnapProvider.GetCurrentRegionSnap(screenPoint, currentProcessId, windowSnap);
         }
 
         public async Task<SnapResult> TryGetElementSnapAsync(
