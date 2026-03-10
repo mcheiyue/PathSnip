@@ -89,7 +89,12 @@ namespace PathSnip.Services.Snap
                 return SnapResult.None;
             }
 
-            RegionKind regionKind = ClassifyRegionKind(windowHandle, physicalRegionBounds, physicalClientBounds);
+            string processName = ResolveProcessName(windowHandle);
+            RegionProfile profile = ResolveRegionProfile(processName);
+            RegionSelection regionSelection = SelectRegionByProfile(profile, physicalRegionBounds, physicalClientBounds);
+
+            physicalRegionBounds = regionSelection.Bounds;
+            RegionKind regionKind = regionSelection.Kind;
 
             RegionCandidate regionCandidate = new RegionCandidate(
                 logicalRegionBounds,
@@ -120,14 +125,27 @@ namespace PathSnip.Services.Snap
             return ratio >= MinRegionAreaRatio;
         }
 
-        private static RegionKind ClassifyRegionKind(IntPtr windowHandle, Rect physicalRegionBounds, Rect physicalClientBounds)
+        private static RegionSelection SelectRegionByProfile(RegionProfile profile, Rect physicalRegionBounds, Rect physicalClientBounds)
         {
-            string processName = ResolveProcessName(windowHandle);
-            if (!string.Equals(processName, "explorer", StringComparison.OrdinalIgnoreCase))
+            RegionKind kind = ClassifyRegionKind(profile, physicalRegionBounds, physicalClientBounds);
+
+            if (profile == RegionProfile.Browser && kind == RegionKind.PathBar && IsTinyTopStrip(physicalRegionBounds, physicalClientBounds))
             {
-                return RegionKind.Unknown;
+                Rect promotedBounds = BuildPrimaryContentBounds(physicalClientBounds, physicalRegionBounds.Bottom, 0.12);
+                return new RegionSelection(promotedBounds, RegionKind.MainContent);
             }
 
+            if (profile == RegionProfile.Ide && kind == RegionKind.Toolbar && IsTinyTopStrip(physicalRegionBounds, physicalClientBounds))
+            {
+                Rect promotedBounds = BuildPrimaryContentBounds(physicalClientBounds, physicalRegionBounds.Bottom, 0.14);
+                return new RegionSelection(promotedBounds, RegionKind.Editor);
+            }
+
+            return new RegionSelection(physicalRegionBounds, kind);
+        }
+
+        private static RegionKind ClassifyRegionKind(RegionProfile profile, Rect physicalRegionBounds, Rect physicalClientBounds)
+        {
             if (physicalClientBounds.IsEmpty)
             {
                 return RegionKind.Unknown;
@@ -148,22 +166,145 @@ namespace PathSnip.Services.Snap
             double leftRatio = (rx - cx) / cw;
             double topRatio = (ry - cy) / ch;
 
-            if (leftRatio <= 0.02 && wRatio <= 0.38 && hRatio >= 0.5)
+            if (profile == RegionProfile.Explorer)
             {
-                return RegionKind.NavigationPane;
+                if (leftRatio <= 0.02 && wRatio <= 0.38 && hRatio >= 0.5)
+                {
+                    return RegionKind.NavigationPane;
+                }
+
+                if (leftRatio >= 0.62 && wRatio <= 0.38 && hRatio >= 0.5)
+                {
+                    return RegionKind.PreviewPane;
+                }
+
+                if (topRatio <= 0.2 && hRatio <= 0.28 && wRatio >= 0.6)
+                {
+                    return RegionKind.PathBar;
+                }
+
+                return RegionKind.ContentPane;
             }
 
-            if (leftRatio >= 0.62 && wRatio <= 0.38 && hRatio >= 0.5)
+            if (profile == RegionProfile.Browser)
             {
-                return RegionKind.PreviewPane;
+                if (topRatio <= 0.18 && hRatio <= 0.16 && wRatio >= 0.52)
+                {
+                    return RegionKind.PathBar;
+                }
+
+                if ((leftRatio <= 0.03 || leftRatio >= 0.67) && wRatio <= 0.33 && hRatio >= 0.45)
+                {
+                    return RegionKind.Sidebar;
+                }
+
+                return RegionKind.MainContent;
             }
 
-            if (topRatio <= 0.2 && hRatio <= 0.28 && wRatio >= 0.6)
+            if (profile == RegionProfile.Ide)
             {
-                return RegionKind.PathBar;
+                if (topRatio <= 0.16 && hRatio <= 0.14 && wRatio >= 0.5)
+                {
+                    return RegionKind.Toolbar;
+                }
+
+                if (topRatio >= 0.68 && hRatio >= 0.2 && wRatio >= 0.45)
+                {
+                    return RegionKind.Panel;
+                }
+
+                if ((leftRatio <= 0.03 || leftRatio >= 0.67) && wRatio <= 0.33 && hRatio >= 0.5)
+                {
+                    return RegionKind.Sidebar;
+                }
+
+                return RegionKind.Editor;
             }
 
-            return RegionKind.ContentPane;
+            return RegionKind.Unknown;
+        }
+
+        private static RegionProfile ResolveRegionProfile(string processName)
+        {
+            if (string.IsNullOrWhiteSpace(processName))
+            {
+                return RegionProfile.Unknown;
+            }
+
+            if (string.Equals(processName, "explorer", StringComparison.OrdinalIgnoreCase))
+            {
+                return RegionProfile.Explorer;
+            }
+
+            if (IsBrowserProcess(processName))
+            {
+                return RegionProfile.Browser;
+            }
+
+            if (IsIdeProcess(processName))
+            {
+                return RegionProfile.Ide;
+            }
+
+            return RegionProfile.Unknown;
+        }
+
+        private static bool IsBrowserProcess(string processName)
+        {
+            return string.Equals(processName, "chrome", StringComparison.OrdinalIgnoreCase)
+                || string.Equals(processName, "msedge", StringComparison.OrdinalIgnoreCase)
+                || string.Equals(processName, "firefox", StringComparison.OrdinalIgnoreCase)
+                || string.Equals(processName, "brave", StringComparison.OrdinalIgnoreCase)
+                || string.Equals(processName, "opera", StringComparison.OrdinalIgnoreCase)
+                || string.Equals(processName, "vivaldi", StringComparison.OrdinalIgnoreCase);
+        }
+
+        private static bool IsIdeProcess(string processName)
+        {
+            return string.Equals(processName, "devenv", StringComparison.OrdinalIgnoreCase)
+                || string.Equals(processName, "code", StringComparison.OrdinalIgnoreCase)
+                || string.Equals(processName, "code-insiders", StringComparison.OrdinalIgnoreCase)
+                || string.Equals(processName, "rider64", StringComparison.OrdinalIgnoreCase)
+                || string.Equals(processName, "idea64", StringComparison.OrdinalIgnoreCase)
+                || string.Equals(processName, "pycharm64", StringComparison.OrdinalIgnoreCase)
+                || string.Equals(processName, "webstorm64", StringComparison.OrdinalIgnoreCase)
+                || string.Equals(processName, "goland64", StringComparison.OrdinalIgnoreCase)
+                || string.Equals(processName, "clion64", StringComparison.OrdinalIgnoreCase);
+        }
+
+        private static bool IsTinyTopStrip(Rect physicalRegionBounds, Rect physicalClientBounds)
+        {
+            if (physicalClientBounds.IsEmpty || physicalClientBounds.Width <= 0 || physicalClientBounds.Height <= 0)
+            {
+                return false;
+            }
+
+            double clientHeight = Math.Max(1, physicalClientBounds.Height);
+            double clientWidth = Math.Max(1, physicalClientBounds.Width);
+            double hRatio = physicalRegionBounds.Height / clientHeight;
+            double wRatio = physicalRegionBounds.Width / clientWidth;
+            double topRatio = (physicalRegionBounds.Top - physicalClientBounds.Top) / clientHeight;
+            return topRatio <= 0.24 && hRatio <= 0.08 && wRatio >= 0.45;
+        }
+
+        private static Rect BuildPrimaryContentBounds(Rect physicalClientBounds, double hitRegionBottom, double minTopRatio)
+        {
+            if (physicalClientBounds.IsEmpty || physicalClientBounds.Width <= 0 || physicalClientBounds.Height <= 0)
+            {
+                return physicalClientBounds;
+            }
+
+            double minTop = physicalClientBounds.Top + physicalClientBounds.Height * minTopRatio;
+            double targetTop = Math.Max(minTop, hitRegionBottom);
+            targetTop = Math.Min(targetTop, physicalClientBounds.Bottom - 40);
+
+            double height = physicalClientBounds.Bottom - targetTop;
+            if (height <= 40)
+            {
+                return physicalClientBounds;
+            }
+
+            return new Rect(physicalClientBounds.Left, targetTop, physicalClientBounds.Width, height);
         }
 
         private static string ResolveProcessName(IntPtr windowHandle)
@@ -307,6 +448,27 @@ namespace PathSnip.Services.Snap
         private static bool IsValidScale(double scale)
         {
             return scale > 0 && scale <= 4;
+        }
+
+        private enum RegionProfile
+        {
+            Unknown,
+            Explorer,
+            Browser,
+            Ide
+        }
+
+        private readonly struct RegionSelection
+        {
+            public RegionSelection(Rect bounds, RegionKind kind)
+            {
+                Bounds = bounds;
+                Kind = kind;
+            }
+
+            public Rect Bounds { get; }
+
+            public RegionKind Kind { get; }
         }
 
         [StructLayout(LayoutKind.Sequential)]
