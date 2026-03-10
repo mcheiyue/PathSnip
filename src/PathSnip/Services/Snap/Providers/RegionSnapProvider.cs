@@ -8,6 +8,7 @@ namespace PathSnip.Services.Snap
     public sealed class RegionSnapProvider
     {
         private const int DwmaExtendedFrameBounds = 9;
+        private const uint MonitorDefaultToNearest = 2;
         private const double MinRegionAreaRatio = 0.02;
 
         public SnapResult GetCurrentRegionSnap(Point screenPoint, int currentProcessId, SnapResult windowSnap)
@@ -56,6 +57,7 @@ namespace PathSnip.Services.Snap
             RegionProfile profile = ResolveRegionProfile(processName);
 
             IntPtr regionHandle = ResolveRegionHwnd(windowHandle, physicalPoint);
+            bool usedSynthetic = false;
             RegionSelection regionSelection;
             if (regionHandle != IntPtr.Zero && regionHandle != windowHandle)
             {
@@ -71,6 +73,7 @@ namespace PathSnip.Services.Snap
                     if (ShouldUseSyntheticRegion(profile) && TryBuildSyntheticRegionSelection(profile, physicalClientBounds, physicalPoint, out RegionSelection syntheticSelection))
                     {
                         regionSelection = syntheticSelection;
+                        usedSynthetic = true;
                     }
                     else
                     {
@@ -87,6 +90,7 @@ namespace PathSnip.Services.Snap
                 if (ShouldUseSyntheticRegion(profile) && TryBuildSyntheticRegionSelection(profile, physicalClientBounds, physicalPoint, out RegionSelection syntheticSelection))
                 {
                     regionSelection = syntheticSelection;
+                    usedSynthetic = true;
                 }
                 else
                 {
@@ -96,6 +100,11 @@ namespace PathSnip.Services.Snap
 
             Rect physicalRegionBounds = regionSelection.Bounds;
             RegionKind regionKind = regionSelection.Kind;
+
+            if (usedSynthetic && TryClampToWorkArea(physicalRegionBounds, out Rect clampedBounds))
+            {
+                physicalRegionBounds = clampedBounds;
+            }
 
             if (physicalRegionBounds.IsEmpty || physicalRegionBounds.Width <= 0 || physicalRegionBounds.Height <= 0)
             {
@@ -191,81 +200,12 @@ namespace PathSnip.Services.Snap
 
         private static RegionSelection BuildBrowserSyntheticRegion(Rect physicalClientBounds, Point physicalPoint)
         {
-            double left = physicalClientBounds.Left;
-            double top = physicalClientBounds.Top;
-            double right = physicalClientBounds.Right;
-            double bottom = physicalClientBounds.Bottom;
-            double width = Math.Max(1, physicalClientBounds.Width);
-            double height = Math.Max(1, physicalClientBounds.Height);
-
-            double topBarHeight = Clamp(height * 0.12, 56, 140);
-            double sidebarWidth = Clamp(width * 0.22, 220, 420);
-
-            if (physicalPoint.Y <= top + topBarHeight)
-            {
-                return new RegionSelection(new Rect(left, top, width, topBarHeight), RegionKind.PathBar);
-            }
-
-            double bodyTop = top + topBarHeight;
-            double bodyHeight = Math.Max(40, bottom - bodyTop);
-            if (physicalPoint.X <= left + sidebarWidth)
-            {
-                return new RegionSelection(new Rect(left, bodyTop, sidebarWidth, bodyHeight), RegionKind.Sidebar);
-            }
-
-            if (physicalPoint.X >= right - sidebarWidth)
-            {
-                return new RegionSelection(new Rect(right - sidebarWidth, bodyTop, sidebarWidth, bodyHeight), RegionKind.Sidebar);
-            }
-
-            return new RegionSelection(new Rect(left, bodyTop, width, bodyHeight), RegionKind.MainContent);
+            return new RegionSelection(physicalClientBounds, RegionKind.MainContent);
         }
 
         private static RegionSelection BuildIdeSyntheticRegion(Rect physicalClientBounds, Point physicalPoint)
         {
-            double left = physicalClientBounds.Left;
-            double top = physicalClientBounds.Top;
-            double right = physicalClientBounds.Right;
-            double bottom = physicalClientBounds.Bottom;
-            double width = Math.Max(1, physicalClientBounds.Width);
-            double height = Math.Max(1, physicalClientBounds.Height);
-
-            double toolbarHeight = Clamp(height * 0.10, 42, 110);
-            double panelHeight = Clamp(height * 0.22, 140, 320);
-            double sidebarWidth = Clamp(width * 0.18, 200, 380);
-
-            if (physicalPoint.Y <= top + toolbarHeight)
-            {
-                return new RegionSelection(new Rect(left, top, width, toolbarHeight), RegionKind.Toolbar);
-            }
-
-            if (physicalPoint.Y >= bottom - panelHeight)
-            {
-                return new RegionSelection(new Rect(left, bottom - panelHeight, width, panelHeight), RegionKind.Panel);
-            }
-
-            double contentTop = top + toolbarHeight;
-            double contentBottom = Math.Max(contentTop + 80, bottom - panelHeight);
-            double contentHeight = Math.Max(80, contentBottom - contentTop);
-            if (physicalPoint.X <= left + sidebarWidth)
-            {
-                return new RegionSelection(new Rect(left, contentTop, sidebarWidth, contentHeight), RegionKind.Sidebar);
-            }
-
-            if (physicalPoint.X >= right - sidebarWidth)
-            {
-                return new RegionSelection(new Rect(right - sidebarWidth, contentTop, sidebarWidth, contentHeight), RegionKind.Sidebar);
-            }
-
-            double editorLeft = left + sidebarWidth;
-            double editorRight = right - sidebarWidth;
-            if (editorRight - editorLeft <= 120)
-            {
-                editorLeft = left;
-                editorRight = right;
-            }
-
-            return new RegionSelection(new Rect(editorLeft, contentTop, Math.Max(120, editorRight - editorLeft), contentHeight), RegionKind.Editor);
+            return new RegionSelection(physicalClientBounds, RegionKind.Editor);
         }
 
         private static double Clamp(double value, double min, double max)
@@ -579,6 +519,55 @@ namespace PathSnip.Services.Snap
             return scale > 0 && scale <= 4;
         }
 
+        private static bool TryClampToWorkArea(Rect bounds, out Rect clampedBounds)
+        {
+            clampedBounds = bounds;
+            if (bounds.IsEmpty || bounds.Width <= 0 || bounds.Height <= 0)
+            {
+                return false;
+            }
+
+            RECT rect = new RECT
+            {
+                Left = (int)Math.Round(bounds.Left),
+                Top = (int)Math.Round(bounds.Top),
+                Right = (int)Math.Round(bounds.Right),
+                Bottom = (int)Math.Round(bounds.Bottom)
+            };
+
+            IntPtr monitor = MonitorFromRect(ref rect, MonitorDefaultToNearest);
+            if (monitor == IntPtr.Zero)
+            {
+                return false;
+            }
+
+            var info = new MONITORINFO { cbSize = Marshal.SizeOf(typeof(MONITORINFO)) };
+            if (!GetMonitorInfo(monitor, ref info))
+            {
+                return false;
+            }
+
+            Rect workArea = new Rect(
+                info.rcWork.Left,
+                info.rcWork.Top,
+                info.rcWork.Right - info.rcWork.Left,
+                info.rcWork.Bottom - info.rcWork.Top);
+
+            if (workArea.IsEmpty || workArea.Width <= 0 || workArea.Height <= 0)
+            {
+                return false;
+            }
+
+            Rect intersected = Rect.Intersect(bounds, workArea);
+            if (intersected.IsEmpty || intersected.Width <= 0 || intersected.Height <= 0)
+            {
+                return false;
+            }
+
+            clampedBounds = intersected;
+            return true;
+        }
+
         private enum RegionProfile
         {
             Unknown,
@@ -616,6 +605,15 @@ namespace PathSnip.Services.Snap
             public int Bottom;
         }
 
+        [StructLayout(LayoutKind.Sequential)]
+        private struct MONITORINFO
+        {
+            public int cbSize;
+            public RECT rcMonitor;
+            public RECT rcWork;
+            public uint dwFlags;
+        }
+
         [DllImport("user32.dll")]
         private static extern bool ScreenToClient(IntPtr hWnd, ref POINT lpPoint);
 
@@ -630,6 +628,12 @@ namespace PathSnip.Services.Snap
 
         [DllImport("user32.dll")]
         private static extern bool ClientToScreen(IntPtr hWnd, ref POINT lpPoint);
+
+        [DllImport("user32.dll")]
+        private static extern IntPtr MonitorFromRect(ref RECT lprc, uint dwFlags);
+
+        [DllImport("user32.dll", CharSet = CharSet.Auto)]
+        private static extern bool GetMonitorInfo(IntPtr hMonitor, ref MONITORINFO lpmi);
 
         [DllImport("dwmapi.dll")]
         private static extern int DwmGetWindowAttribute(IntPtr hwnd, int dwAttribute, out RECT pvAttribute, int cbAttribute);
