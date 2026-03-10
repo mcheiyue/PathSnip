@@ -92,6 +92,7 @@ namespace PathSnip
         private SnapResult _currentSnapResult = SnapResult.None;
         private SnapResult _currentWindowSnap = SnapResult.None;
         private SnapResult _lastStableRegionSnap = SnapResult.None;
+        private DateTime _lastRegionCandidateLogAt = DateTime.MinValue;
         private DateTime _lastRegionSelectLogAt = DateTime.MinValue;
         private DateTime _regionLockUntil = DateTime.MinValue;
         private int _regionFallbackMissCount;
@@ -532,6 +533,15 @@ namespace PathSnip
                     double windowArea = Math.Max(1, windowSnap.Bounds.Value.Width * windowSnap.Bounds.Value.Height);
                     double regionArea = Math.Max(1, regionSnap.Bounds.Value.Width * regionSnap.Bounds.Value.Height);
                     double areaRatio = regionArea / windowArea;
+
+                    if ((now - _lastRegionCandidateLogAt).TotalMilliseconds >= 250)
+                    {
+                        _lastRegionCandidateLogAt = now;
+                        LogService.LogInfo(
+                            "snap.region.candidate",
+                            $"kind={regionSnap.RegionKind} bounds=({regionSnap.Bounds?.Left:F1},{regionSnap.Bounds?.Top:F1},{regionSnap.Bounds?.Width:F1},{regionSnap.Bounds?.Height:F1}) areaRatio={areaRatio:F3} fast={isFastPointerMotion}",
+                            stage: "region.candidate");
+                    }
 
                     if (!isFastPointerMotion && ShouldUseRegionByAreaRatio(areaRatio))
                     {

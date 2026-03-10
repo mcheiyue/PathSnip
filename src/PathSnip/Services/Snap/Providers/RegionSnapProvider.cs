@@ -52,9 +52,11 @@ namespace PathSnip.Services.Snap
                 physicalWindowBounds.Left + (screenPoint.X - logicalWindowBounds.Left) * scaleX,
                 physicalWindowBounds.Top + (screenPoint.Y - logicalWindowBounds.Top) * scaleY);
 
-            IntPtr regionHandle = ResolveRegionHwnd(windowHandle, physicalPoint);
-            Rect physicalRegionBounds;
+            string processName = ResolveProcessName(windowHandle);
+            RegionProfile profile = ResolveRegionProfile(processName);
 
+            IntPtr regionHandle = ResolveRegionHwnd(windowHandle, physicalPoint);
+            RegionSelection regionSelection;
             if (regionHandle != IntPtr.Zero && regionHandle != windowHandle)
             {
                 RECT rect;
@@ -66,16 +68,38 @@ namespace PathSnip.Services.Snap
                 var hitBounds = new Rect(rect.Left, rect.Top, rect.Right - rect.Left, rect.Bottom - rect.Top);
                 if (!IsMeaningfulRegion(hitBounds, physicalClientBounds))
                 {
-                    physicalRegionBounds = physicalClientBounds;
+                    if (ShouldUseSyntheticRegion(profile) && TryBuildSyntheticRegionSelection(profile, physicalClientBounds, physicalPoint, out RegionSelection syntheticSelection))
+                    {
+                        regionSelection = syntheticSelection;
+                    }
+                    else
+                    {
+                        regionSelection = SelectRegionByProfile(profile, physicalClientBounds, physicalClientBounds);
+                    }
                 }
                 else
                 {
-                    physicalRegionBounds = hitBounds;
+                    regionSelection = SelectRegionByProfile(profile, hitBounds, physicalClientBounds);
                 }
             }
             else
             {
-                physicalRegionBounds = physicalClientBounds;
+                if (ShouldUseSyntheticRegion(profile) && TryBuildSyntheticRegionSelection(profile, physicalClientBounds, physicalPoint, out RegionSelection syntheticSelection))
+                {
+                    regionSelection = syntheticSelection;
+                }
+                else
+                {
+                    regionSelection = SelectRegionByProfile(profile, physicalClientBounds, physicalClientBounds);
+                }
+            }
+
+            Rect physicalRegionBounds = regionSelection.Bounds;
+            RegionKind regionKind = regionSelection.Kind;
+
+            if (physicalRegionBounds.IsEmpty || physicalRegionBounds.Width <= 0 || physicalRegionBounds.Height <= 0)
+            {
+                return SnapResult.None;
             }
 
             Rect logicalRegionBounds = new Rect(
@@ -88,13 +112,6 @@ namespace PathSnip.Services.Snap
             {
                 return SnapResult.None;
             }
-
-            string processName = ResolveProcessName(windowHandle);
-            RegionProfile profile = ResolveRegionProfile(processName);
-            RegionSelection regionSelection = SelectRegionByProfile(profile, physicalRegionBounds, physicalClientBounds);
-
-            physicalRegionBounds = regionSelection.Bounds;
-            RegionKind regionKind = regionSelection.Kind;
 
             RegionCandidate regionCandidate = new RegionCandidate(
                 logicalRegionBounds,
@@ -142,6 +159,118 @@ namespace PathSnip.Services.Snap
             }
 
             return new RegionSelection(physicalRegionBounds, kind);
+        }
+
+        private static bool ShouldUseSyntheticRegion(RegionProfile profile)
+        {
+            return profile == RegionProfile.Browser || profile == RegionProfile.Ide;
+        }
+
+        private static bool TryBuildSyntheticRegionSelection(RegionProfile profile, Rect physicalClientBounds, Point physicalPoint, out RegionSelection selection)
+        {
+            selection = default;
+            if (physicalClientBounds.IsEmpty || physicalClientBounds.Width <= 0 || physicalClientBounds.Height <= 0)
+            {
+                return false;
+            }
+
+            if (profile == RegionProfile.Browser)
+            {
+                selection = BuildBrowserSyntheticRegion(physicalClientBounds, physicalPoint);
+                return true;
+            }
+
+            if (profile == RegionProfile.Ide)
+            {
+                selection = BuildIdeSyntheticRegion(physicalClientBounds, physicalPoint);
+                return true;
+            }
+
+            return false;
+        }
+
+        private static RegionSelection BuildBrowserSyntheticRegion(Rect physicalClientBounds, Point physicalPoint)
+        {
+            double left = physicalClientBounds.Left;
+            double top = physicalClientBounds.Top;
+            double right = physicalClientBounds.Right;
+            double bottom = physicalClientBounds.Bottom;
+            double width = Math.Max(1, physicalClientBounds.Width);
+            double height = Math.Max(1, physicalClientBounds.Height);
+
+            double topBarHeight = Clamp(height * 0.12, 56, 140);
+            double sidebarWidth = Clamp(width * 0.22, 220, 420);
+
+            if (physicalPoint.Y <= top + topBarHeight)
+            {
+                return new RegionSelection(new Rect(left, top, width, topBarHeight), RegionKind.PathBar);
+            }
+
+            double bodyTop = top + topBarHeight;
+            double bodyHeight = Math.Max(40, bottom - bodyTop);
+            if (physicalPoint.X <= left + sidebarWidth)
+            {
+                return new RegionSelection(new Rect(left, bodyTop, sidebarWidth, bodyHeight), RegionKind.Sidebar);
+            }
+
+            if (physicalPoint.X >= right - sidebarWidth)
+            {
+                return new RegionSelection(new Rect(right - sidebarWidth, bodyTop, sidebarWidth, bodyHeight), RegionKind.Sidebar);
+            }
+
+            return new RegionSelection(new Rect(left, bodyTop, width, bodyHeight), RegionKind.MainContent);
+        }
+
+        private static RegionSelection BuildIdeSyntheticRegion(Rect physicalClientBounds, Point physicalPoint)
+        {
+            double left = physicalClientBounds.Left;
+            double top = physicalClientBounds.Top;
+            double right = physicalClientBounds.Right;
+            double bottom = physicalClientBounds.Bottom;
+            double width = Math.Max(1, physicalClientBounds.Width);
+            double height = Math.Max(1, physicalClientBounds.Height);
+
+            double toolbarHeight = Clamp(height * 0.10, 42, 110);
+            double panelHeight = Clamp(height * 0.22, 140, 320);
+            double sidebarWidth = Clamp(width * 0.18, 200, 380);
+
+            if (physicalPoint.Y <= top + toolbarHeight)
+            {
+                return new RegionSelection(new Rect(left, top, width, toolbarHeight), RegionKind.Toolbar);
+            }
+
+            if (physicalPoint.Y >= bottom - panelHeight)
+            {
+                return new RegionSelection(new Rect(left, bottom - panelHeight, width, panelHeight), RegionKind.Panel);
+            }
+
+            double contentTop = top + toolbarHeight;
+            double contentBottom = Math.Max(contentTop + 80, bottom - panelHeight);
+            double contentHeight = Math.Max(80, contentBottom - contentTop);
+            if (physicalPoint.X <= left + sidebarWidth)
+            {
+                return new RegionSelection(new Rect(left, contentTop, sidebarWidth, contentHeight), RegionKind.Sidebar);
+            }
+
+            if (physicalPoint.X >= right - sidebarWidth)
+            {
+                return new RegionSelection(new Rect(right - sidebarWidth, contentTop, sidebarWidth, contentHeight), RegionKind.Sidebar);
+            }
+
+            double editorLeft = left + sidebarWidth;
+            double editorRight = right - sidebarWidth;
+            if (editorRight - editorLeft <= 120)
+            {
+                editorLeft = left;
+                editorRight = right;
+            }
+
+            return new RegionSelection(new Rect(editorLeft, contentTop, Math.Max(120, editorRight - editorLeft), contentHeight), RegionKind.Editor);
+        }
+
+        private static double Clamp(double value, double min, double max)
+        {
+            return Math.Max(min, Math.Min(max, value));
         }
 
         private static RegionKind ClassifyRegionKind(RegionProfile profile, Rect physicalRegionBounds, Rect physicalClientBounds)
