@@ -10,6 +10,7 @@ namespace PathSnip.Services.Snap
         private const int DwmaExtendedFrameBounds = 9;
         private const uint MonitorDefaultToNearest = 2;
         private const double MinRegionAreaRatio = 0.02;
+        private const double MinChildEdgeLength = 40;
 
         public SnapResult GetCurrentRegionSnap(Point screenPoint, int currentProcessId, SnapResult windowSnap)
         {
@@ -58,6 +59,7 @@ namespace PathSnip.Services.Snap
 
             IntPtr regionHandle = ResolveRegionHwnd(windowHandle, physicalPoint);
             bool usedSynthetic = false;
+            string regionSource = "child-hit";
             RegionSelection regionSelection;
             if (regionHandle != IntPtr.Zero && regionHandle != windowHandle)
             {
@@ -70,31 +72,47 @@ namespace PathSnip.Services.Snap
                 var hitBounds = new Rect(rect.Left, rect.Top, rect.Right - rect.Left, rect.Bottom - rect.Top);
                 if (!IsMeaningfulRegion(hitBounds, physicalClientBounds))
                 {
+                    if (TryBuildChildWindowRegionSelection(windowHandle, profile, physicalClientBounds, physicalPoint, out RegionSelection childSelection))
+                    {
+                        regionSelection = childSelection;
+                        regionSource = "child-enum";
+                    }
+                    else
                     if (ShouldUseSyntheticRegion(profile) && TryBuildSyntheticRegionSelection(profile, physicalClientBounds, physicalPoint, out RegionSelection syntheticSelection))
                     {
                         regionSelection = syntheticSelection;
                         usedSynthetic = true;
+                        regionSource = "fallback";
                     }
                     else
                     {
                         regionSelection = SelectRegionByProfile(profile, physicalClientBounds, physicalClientBounds);
+                        regionSource = "client";
                     }
                 }
                 else
                 {
                     regionSelection = SelectRegionByProfile(profile, hitBounds, physicalClientBounds);
+                    regionSource = "child-hit";
                 }
             }
             else
             {
-                if (ShouldUseSyntheticRegion(profile) && TryBuildSyntheticRegionSelection(profile, physicalClientBounds, physicalPoint, out RegionSelection syntheticSelection))
+                if (TryBuildChildWindowRegionSelection(windowHandle, profile, physicalClientBounds, physicalPoint, out RegionSelection childSelection))
+                {
+                    regionSelection = childSelection;
+                    regionSource = "child-enum";
+                }
+                else if (ShouldUseSyntheticRegion(profile) && TryBuildSyntheticRegionSelection(profile, physicalClientBounds, physicalPoint, out RegionSelection syntheticSelection))
                 {
                     regionSelection = syntheticSelection;
                     usedSynthetic = true;
+                    regionSource = "fallback";
                 }
                 else
                 {
                     regionSelection = SelectRegionByProfile(profile, physicalClientBounds, physicalClientBounds);
+                    regionSource = "client";
                 }
             }
 
@@ -124,7 +142,7 @@ namespace PathSnip.Services.Snap
 
             RegionCandidate regionCandidate = new RegionCandidate(
                 logicalRegionBounds,
-                string.Empty,
+                regionSource,
                 regionKind,
                 SnapSource.WindowDetection,
                 0.7,
@@ -196,6 +214,96 @@ namespace PathSnip.Services.Snap
             }
 
             return false;
+        }
+
+        private static bool TryBuildChildWindowRegionSelection(
+            IntPtr windowHandle,
+            RegionProfile profile,
+            Rect physicalClientBounds,
+            Point physicalPoint,
+            out RegionSelection selection)
+        {
+            selection = default;
+            if (profile != RegionProfile.Browser && profile != RegionProfile.Ide)
+            {
+                return false;
+            }
+
+            if (physicalClientBounds.IsEmpty || physicalClientBounds.Width <= 0 || physicalClientBounds.Height <= 0)
+            {
+                return false;
+            }
+
+            var candidates = new System.Collections.Generic.List<Rect>();
+            EnumChildWindows(windowHandle, (child, lParam) =>
+            {
+                if (!IsWindowVisible(child))
+                {
+                    return true;
+                }
+
+                RECT rect;
+                if (!GetWindowRect(child, out rect) || rect.Right <= rect.Left || rect.Bottom <= rect.Top)
+                {
+                    return true;
+                }
+
+                Rect bounds = new Rect(rect.Left, rect.Top, rect.Right - rect.Left, rect.Bottom - rect.Top);
+                Rect intersected = Rect.Intersect(bounds, physicalClientBounds);
+                if (intersected.IsEmpty || intersected.Width <= 0 || intersected.Height <= 0)
+                {
+                    return true;
+                }
+
+                if (intersected.Width < MinChildEdgeLength || intersected.Height < MinChildEdgeLength)
+                {
+                    return true;
+                }
+
+                if (!IsMeaningfulRegion(intersected, physicalClientBounds))
+                {
+                    return true;
+                }
+
+                candidates.Add(intersected);
+                return true;
+            }, IntPtr.Zero);
+
+            if (candidates.Count == 0)
+            {
+                return false;
+            }
+
+            Rect? best = null;
+            double bestArea = 0;
+            foreach (Rect candidate in candidates)
+            {
+                if (!candidate.Contains(physicalPoint))
+                {
+                    continue;
+                }
+
+                double area = candidate.Width * candidate.Height;
+                if (best == null || area < bestArea)
+                {
+                    best = candidate;
+                    bestArea = area;
+                }
+            }
+
+            if (best == null)
+            {
+                return false;
+            }
+
+            RegionKind kind = ClassifyRegionKind(profile, best.Value, physicalClientBounds);
+            if (kind == RegionKind.Unknown)
+            {
+                kind = profile == RegionProfile.Browser ? RegionKind.MainContent : RegionKind.Editor;
+            }
+
+            selection = new RegionSelection(best.Value, kind);
+            return true;
         }
 
         private static RegionSelection BuildBrowserSyntheticRegion(Rect physicalClientBounds, Point physicalPoint)
@@ -589,6 +697,8 @@ namespace PathSnip.Services.Snap
             public RegionKind Kind { get; }
         }
 
+        private delegate bool EnumWindowProc(IntPtr hWnd, IntPtr lParam);
+
         [StructLayout(LayoutKind.Sequential)]
         private struct POINT
         {
@@ -616,6 +726,12 @@ namespace PathSnip.Services.Snap
 
         [DllImport("user32.dll")]
         private static extern bool ScreenToClient(IntPtr hWnd, ref POINT lpPoint);
+
+        [DllImport("user32.dll")]
+        private static extern bool EnumChildWindows(IntPtr hWndParent, EnumWindowProc lpEnumFunc, IntPtr lParam);
+
+        [DllImport("user32.dll")]
+        private static extern bool IsWindowVisible(IntPtr hWnd);
 
         [DllImport("user32.dll")]
         private static extern IntPtr ChildWindowFromPointEx(IntPtr hWndParent, POINT pt, uint uFlags);

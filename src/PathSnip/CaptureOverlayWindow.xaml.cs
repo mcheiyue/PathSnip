@@ -533,17 +533,30 @@ namespace PathSnip
                     double windowArea = Math.Max(1, windowSnap.Bounds.Value.Width * windowSnap.Bounds.Value.Height);
                     double regionArea = Math.Max(1, regionSnap.Bounds.Value.Width * regionSnap.Bounds.Value.Height);
                     double areaRatio = regionArea / windowArea;
+                    string regionSource = regionSnap.RegionCandidate?.Label ?? "unknown";
 
                     if ((now - _lastRegionCandidateLogAt).TotalMilliseconds >= 250)
                     {
                         _lastRegionCandidateLogAt = now;
                         LogService.LogInfo(
                             "snap.region.candidate",
-                            $"kind={regionSnap.RegionKind} bounds=({regionSnap.Bounds?.Left:F1},{regionSnap.Bounds?.Top:F1},{regionSnap.Bounds?.Width:F1},{regionSnap.Bounds?.Height:F1}) areaRatio={areaRatio:F3} fast={isFastPointerMotion}",
+                            $"kind={regionSnap.RegionKind} source={regionSource} bounds=({regionSnap.Bounds?.Left:F1},{regionSnap.Bounds?.Top:F1},{regionSnap.Bounds?.Width:F1},{regionSnap.Bounds?.Height:F1}) areaRatio={areaRatio:F3} fast={isFastPointerMotion}",
                             stage: "region.candidate");
                     }
 
-                    if (!isFastPointerMotion && ShouldUseRegionByAreaRatio(areaRatio))
+                    bool shouldUseRegion;
+                    if (regionSource == "child-enum" &&
+                        (regionSnap.RegionKind == RegionKind.Editor || regionSnap.RegionKind == RegionKind.MainContent))
+                    {
+                        double threshold = _currentSnapResult.Kind == SnapKind.Region ? 0.995 : 0.99;
+                        shouldUseRegion = areaRatio <= threshold;
+                    }
+                    else
+                    {
+                        shouldUseRegion = ShouldUseRegionByAreaRatio(areaRatio);
+                    }
+
+                    if (!isFastPointerMotion && shouldUseRegion)
                     {
                         snapResult = regionSnap;
                         regionSelected = true;
@@ -554,7 +567,7 @@ namespace PathSnip
                             _lastRegionSelectLogAt = now;
                             LogService.LogInfo(
                                 "snap.region.selected",
-                                $"kind={regionSnap.RegionKind} bounds=({regionSnap.Bounds?.Left:F1},{regionSnap.Bounds?.Top:F1},{regionSnap.Bounds?.Width:F1},{regionSnap.Bounds?.Height:F1}) areaRatio={areaRatio:F3}",
+                                $"kind={regionSnap.RegionKind} source={regionSource} bounds=({regionSnap.Bounds?.Left:F1},{regionSnap.Bounds?.Top:F1},{regionSnap.Bounds?.Width:F1},{regionSnap.Bounds?.Height:F1}) areaRatio={areaRatio:F3}",
                                 stage: "region.select");
                         }
                     }
