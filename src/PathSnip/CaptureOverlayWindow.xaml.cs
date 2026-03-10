@@ -95,6 +95,10 @@ namespace PathSnip
         private DateTime _lastRegionSelectLogAt = DateTime.MinValue;
         private DateTime _regionLockUntil = DateTime.MinValue;
         private int _regionFallbackMissCount;
+        private bool _isFastPointerMotionState;
+        private DateTime _lowSpeedSince = DateTime.MinValue;
+        private Point _lowSpeedAnchorScreenPoint;
+        private bool _hasLowSpeedAnchor;
         private readonly DispatcherTimer _elementSnapHoverTimer;
         private CancellationTokenSource _elementSnapCts;
         private Point _lastHoverMousePosition;
@@ -106,8 +110,15 @@ namespace PathSnip
         private const int RegionFallbackRequiredMisses = 2;
         private const double ElementExitTolerancePx = 8;
         private const double RegionExitTolerancePx = 12;
+        private const double RegionPromoteAreaRatioThreshold = 0.97;
+        private const double RegionKeepAreaRatioThreshold = 0.99;
         private const double FastPointerSpeedThreshold = 900;
+        private const double FastPointerRecoverSpeedThreshold = 700;
         private const double ElementPromotionSpeedThreshold = 260;
+        private const int ElementPromotionDwellMs = 160;
+        private const double ElementPromotionDwellRadiusPx = 6;
+        private const double ElementPromotionMinAreaRatio = 0.03;
+        private const double ElementPromotionMaxAreaRatio = 0.90;
         private readonly bool _enableSmartSnap;
         private readonly SmartSnapMode _smartSnapMode;
         private readonly bool _enableElementSnap;
@@ -522,7 +533,7 @@ namespace PathSnip
                     double regionArea = Math.Max(1, regionSnap.Bounds.Value.Width * regionSnap.Bounds.Value.Height);
                     double areaRatio = regionArea / windowArea;
 
-                    if (!isFastPointerMotion && areaRatio <= 0.98)
+                    if (!isFastPointerMotion && ShouldUseRegionByAreaRatio(areaRatio))
                     {
                         snapResult = regionSnap;
                         regionSelected = true;
@@ -598,7 +609,7 @@ namespace PathSnip
                 return;
             }
 
-            if (IsFastPointerMotion() || !CanPromoteToElement())
+            if (IsFastPointerMotion() || !CanPromoteToElement(now))
             {
                 _snapIntentMode = SnapIntentMode.WindowLock;
                 _elementSnapHoverTimer.Stop();
@@ -650,12 +661,12 @@ namespace PathSnip
                 return;
             }
 
-            if (IsFastPointerMotion() || !CanPromoteToElement())
+            var now = DateTime.Now;
+            if (IsFastPointerMotion() || !CanPromoteToElement(now))
             {
                 return;
             }
 
-            var now = DateTime.Now;
             if (_lastElementProbeRequestedAt != DateTime.MinValue &&
                 (now - _lastElementProbeRequestedAt).TotalMilliseconds < ElementProbeMinIntervalMs)
             {
@@ -699,6 +710,11 @@ namespace PathSnip
                 }
 
                 if (!upgradedSnap.IsValid || !upgradedSnap.Bounds.HasValue)
+                {
+                    return;
+                }
+
+                if (!IsPromotableElementCandidate(upgradedSnap, _currentWindowSnap, screenPos))
                 {
                     return;
                 }
@@ -1764,13 +1780,59 @@ namespace PathSnip
                 }
             }
 
+            UpdateFastPointerMotionState();
+            UpdateLowSpeedDwellState(cursorScreenPoint, now);
+
             _lastPointerMoveAt = now;
             _lastPointerScreenPoint = cursorScreenPoint;
         }
 
         private bool IsFastPointerMotion()
         {
-            return _pointerSpeedPxPerSecond >= FastPointerSpeedThreshold;
+            return _isFastPointerMotionState;
+        }
+
+        private void UpdateFastPointerMotionState()
+        {
+            if (_isFastPointerMotionState)
+            {
+                if (_pointerSpeedPxPerSecond <= FastPointerRecoverSpeedThreshold)
+                {
+                    _isFastPointerMotionState = false;
+                }
+
+                return;
+            }
+
+            if (_pointerSpeedPxPerSecond >= FastPointerSpeedThreshold)
+            {
+                _isFastPointerMotionState = true;
+            }
+        }
+
+        private void UpdateLowSpeedDwellState(Point cursorScreenPoint, DateTime now)
+        {
+            if (_pointerSpeedPxPerSecond > ElementPromotionSpeedThreshold)
+            {
+                ResetLowSpeedDwellState();
+                return;
+            }
+
+            if (!_hasLowSpeedAnchor)
+            {
+                _hasLowSpeedAnchor = true;
+                _lowSpeedAnchorScreenPoint = cursorScreenPoint;
+                _lowSpeedSince = now;
+                return;
+            }
+
+            double dx = cursorScreenPoint.X - _lowSpeedAnchorScreenPoint.X;
+            double dy = cursorScreenPoint.Y - _lowSpeedAnchorScreenPoint.Y;
+            if (Math.Sqrt(dx * dx + dy * dy) > ElementPromotionDwellRadiusPx)
+            {
+                _lowSpeedAnchorScreenPoint = cursorScreenPoint;
+                _lowSpeedSince = now;
+            }
         }
 
         private bool TryKeepRegionLock(SnapResult windowSnap, Point cursorScreenPoint, DateTime now, out SnapResult heldRegion)
@@ -1823,11 +1885,53 @@ namespace PathSnip
             _lastStableRegionSnap = SnapResult.None;
             _regionLockUntil = DateTime.MinValue;
             _regionFallbackMissCount = 0;
+            _isFastPointerMotionState = false;
+            ResetLowSpeedDwellState();
         }
 
-        private bool CanPromoteToElement()
+        private bool CanPromoteToElement(DateTime now)
         {
-            return _pointerSpeedPxPerSecond <= ElementPromotionSpeedThreshold;
+            if (_pointerSpeedPxPerSecond > ElementPromotionSpeedThreshold || !_hasLowSpeedAnchor || _lowSpeedSince == DateTime.MinValue)
+            {
+                return false;
+            }
+
+            return (now - _lowSpeedSince).TotalMilliseconds >= ElementPromotionDwellMs;
+        }
+
+        private void ResetLowSpeedDwellState()
+        {
+            _hasLowSpeedAnchor = false;
+            _lowSpeedSince = DateTime.MinValue;
+            _lowSpeedAnchorScreenPoint = default;
+        }
+
+        private bool ShouldUseRegionByAreaRatio(double areaRatio)
+        {
+            double threshold = _currentSnapResult.Kind == SnapKind.Region
+                ? RegionKeepAreaRatioThreshold
+                : RegionPromoteAreaRatioThreshold;
+            return areaRatio <= threshold;
+        }
+
+        private static bool IsPromotableElementCandidate(SnapResult elementSnap, SnapResult windowSnap, Point cursorScreenPoint)
+        {
+            if (!elementSnap.IsValid || !elementSnap.Bounds.HasValue || !windowSnap.IsValid || !windowSnap.Bounds.HasValue)
+            {
+                return false;
+            }
+
+            Rect elementBounds = elementSnap.Bounds.Value;
+            if (!elementBounds.Contains(cursorScreenPoint))
+            {
+                return false;
+            }
+
+            Rect windowBounds = windowSnap.Bounds.Value;
+            double windowArea = Math.Max(1, windowBounds.Width * windowBounds.Height);
+            double elementArea = Math.Max(1, elementBounds.Width * elementBounds.Height);
+            double ratio = elementArea / windowArea;
+            return ratio >= ElementPromotionMinAreaRatio && ratio <= ElementPromotionMaxAreaRatio;
         }
 
         private bool ShouldKeepElementLock(Point cursorScreenPoint, DateTime now)

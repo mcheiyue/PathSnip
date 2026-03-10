@@ -5,8 +5,8 @@ namespace PathSnip.Services.Snap
 {
     public sealed class SnapStabilizer
     {
-        private const int RequiredConsecutiveHits = 1;
-        private const int MinSwitchDelayMs = 20;
+        private const int RequiredConsecutiveHits = 2;
+        private const int MinSwitchDelayMs = 70;
         private const double StableIou = 0.85;
 
         private SnapResult _stableResult = SnapResult.None;

@@ -6,6 +6,8 @@ namespace PathSnip.Services.Snap
     public sealed class SnapRankingPolicy
     {
         private const double MinAcceptDelta = 0;
+        private const double MinElementAreaRatio = 0.03;
+        private const double MaxElementAreaRatio = 0.90;
 
         public bool ShouldUseElement(
             SnapResult windowSnap,
@@ -35,11 +37,23 @@ namespace PathSnip.Services.Snap
             double elementArea = Math.Max(1, elementBounds.Width * elementBounds.Height);
             double areaRatio = elementArea / windowArea;
 
-            double quickPassMinAreaRatio = appProfile == SnapAppProfile.Explorer ? 0.0035 :
-                                           appProfile == SnapAppProfile.Ide ? 0.0032 :
-                                           appProfile == SnapAppProfile.Browser ? 0.0038 : 0.0045;
+            if (areaRatio < MinElementAreaRatio)
+            {
+                reason = $"area_too_small ratio={areaRatio:F4}";
+                return false;
+            }
 
-            if (elementBounds.Contains(cursorPoint) && areaRatio >= quickPassMinAreaRatio && areaRatio <= 0.92)
+            if (areaRatio > MaxElementAreaRatio)
+            {
+                reason = $"area_too_large ratio={areaRatio:F4}";
+                return false;
+            }
+
+            double quickPassMinAreaRatio = appProfile == SnapAppProfile.Explorer ? 0.035 :
+                                           appProfile == SnapAppProfile.Ide ? 0.032 :
+                                           appProfile == SnapAppProfile.Browser ? 0.036 : 0.038;
+
+            if (elementBounds.Contains(cursorPoint) && areaRatio >= quickPassMinAreaRatio && areaRatio <= MaxElementAreaRatio)
             {
                 reason = "quick_pass";
                 return true;
@@ -76,15 +90,15 @@ namespace PathSnip.Services.Snap
             double areaRatio = elementArea / windowArea;
 
             double sizeWeight;
-            if (areaRatio <= 0.02)
+            if (areaRatio <= MinElementAreaRatio)
             {
-                sizeWeight = appProfile == SnapAppProfile.Explorer ? 2 : 4;
+                sizeWeight = 0;
             }
             else if (areaRatio <= 0.6)
             {
                 sizeWeight = appProfile == SnapAppProfile.Explorer ? 17 : 15;
             }
-            else if (areaRatio <= 0.8)
+            else if (areaRatio <= 0.82)
             {
                 sizeWeight = 11;
             }
