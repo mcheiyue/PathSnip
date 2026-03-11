@@ -1761,14 +1761,30 @@ namespace PathSnip
                 }
 
                 long requestVersion = _snapEngine.NextElementRequestVersion();
-                SnapResult upgradedSnap = await _snapEngine.TryGetElementSnapAsync(
-                    screenPoint,
-                    _currentProcessId,
-                    windowSnap,
-                    requestVersion,
-                    ElementSnapTimeoutMs,
-                    CancellationToken.None,
-                    LogService.CreateOperationId("snap"));
+                CancelElementSnapRequest();
+                var currentCts = new CancellationTokenSource();
+                _elementSnapCts = currentCts;
+                SnapResult upgradedSnap;
+                try
+                {
+                    upgradedSnap = await _snapEngine.TryGetElementSnapAsync(
+                        screenPoint,
+                        _currentProcessId,
+                        windowSnap,
+                        requestVersion,
+                        ElementSnapTimeoutMs,
+                        currentCts.Token,
+                        LogService.CreateOperationId("snap"));
+                }
+                finally
+                {
+                    if (ReferenceEquals(_elementSnapCts, currentCts))
+                    {
+                        _elementSnapCts = null;
+                    }
+
+                    currentCts.Dispose();
+                }
 
                 if (!_snapEngine.IsCurrentElementRequest(requestVersion) || !upgradedSnap.IsValid || !upgradedSnap.Bounds.HasValue || !windowSnap.Bounds.HasValue)
                 {
@@ -1817,14 +1833,30 @@ namespace PathSnip
             }
 
             long fallbackRequestVersion = _snapEngine.NextElementRequestVersion();
-            SnapResult fallbackSnap = await _snapEngine.TryGetElementSnapAsync(
-                screenPoint,
-                _currentProcessId,
-                windowSnap,
-                fallbackRequestVersion,
-                ElementSnapTimeoutMs,
-                CancellationToken.None,
-                LogService.CreateOperationId("snap"));
+            CancelElementSnapRequest();
+            var fallbackCts = new CancellationTokenSource();
+            _elementSnapCts = fallbackCts;
+            SnapResult fallbackSnap;
+            try
+            {
+                fallbackSnap = await _snapEngine.TryGetElementSnapAsync(
+                    screenPoint,
+                    _currentProcessId,
+                    windowSnap,
+                    fallbackRequestVersion,
+                    ElementSnapTimeoutMs,
+                    fallbackCts.Token,
+                    LogService.CreateOperationId("snap"));
+            }
+            finally
+            {
+                if (ReferenceEquals(_elementSnapCts, fallbackCts))
+                {
+                    _elementSnapCts = null;
+                }
+
+                fallbackCts.Dispose();
+            }
 
             if (!_snapEngine.IsCurrentElementRequest(fallbackRequestVersion) || !fallbackSnap.IsValid || !fallbackSnap.Bounds.HasValue || !windowSnap.Bounds.HasValue)
             {

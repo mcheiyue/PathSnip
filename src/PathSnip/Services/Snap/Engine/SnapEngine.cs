@@ -316,31 +316,71 @@ namespace PathSnip.Services.Snap
             int timeoutMs,
             CancellationToken cancellationToken)
         {
-            Task<SnapResult> detectTask;
+            var timeoutCts = new CancellationTokenSource();
+            CancellationTokenSource linkedCts = null;
             try
             {
-                detectTask = detect(cancellationToken);
-            }
-            catch (OperationCanceledException)
-            {
-                return SnapResult.None;
-            }
+                if (timeoutMs >= 0)
+                {
+                    timeoutCts.CancelAfter(timeoutMs);
+                }
 
-            Task timeoutTask = Task.Delay(timeoutMs);
-            Task completedTask = await Task.WhenAny(detectTask, timeoutTask).ConfigureAwait(false);
-            if (completedTask != detectTask)
-            {
-                return SnapResult.None;
-            }
+                linkedCts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken, timeoutCts.Token);
 
-            try
-            {
-                SnapResult snapResult = await detectTask.ConfigureAwait(false);
-                return snapResult.IsValid ? snapResult : SnapResult.None;
+                Task<SnapResult> detectTask;
+                try
+                {
+                    detectTask = detect(linkedCts.Token);
+                }
+                catch (OperationCanceledException)
+                {
+                    return SnapResult.None;
+                }
+
+                Task timeoutTask = Task.Delay(Timeout.Infinite, timeoutCts.Token);
+                Task cancelTask = Task.Delay(Timeout.Infinite, cancellationToken);
+
+                Task completedTask = await Task.WhenAny(detectTask, timeoutTask, cancelTask).ConfigureAwait(false);
+                if (completedTask != detectTask)
+                {
+                    try
+                    {
+                        linkedCts.Cancel();
+                    }
+                    catch (ObjectDisposedException)
+                    {
+                    }
+
+                    _ = detectTask.ContinueWith(
+                        t =>
+                        {
+                            _ = t.Exception;
+                        },
+                        CancellationToken.None,
+                        TaskContinuationOptions.OnlyOnFaulted | TaskContinuationOptions.ExecuteSynchronously,
+                        TaskScheduler.Default);
+
+                    return SnapResult.None;
+                }
+
+                try
+                {
+                    SnapResult snapResult = await detectTask.ConfigureAwait(false);
+                    return snapResult.IsValid ? snapResult : SnapResult.None;
+                }
+                catch (OperationCanceledException)
+                {
+                    return SnapResult.None;
+                }
             }
-            catch (OperationCanceledException)
+            finally
             {
-                return SnapResult.None;
+                if (linkedCts != null)
+                {
+                    linkedCts.Dispose();
+                }
+
+                timeoutCts.Dispose();
             }
         }
 
