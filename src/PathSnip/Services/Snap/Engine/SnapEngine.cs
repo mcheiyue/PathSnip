@@ -21,6 +21,7 @@ namespace PathSnip.Services.Snap
         private readonly object _policySync = new object();
         private long _windowRequestVersion;
         private long _elementRequestVersion;
+        private IntPtr? _lastWindowHandle;
         private Rect? _lastWindowBounds;
         private SnapResult _lastAcceptedElement = SnapResult.None;
 
@@ -215,6 +216,7 @@ namespace PathSnip.Services.Snap
                     _lastAcceptedElement = SnapResult.None;
                 }
 
+                _lastWindowHandle = windowSnap.WindowHandle;
                 _lastWindowBounds = windowSnap.Bounds;
 
                 string ignoreReason;
@@ -390,6 +392,15 @@ namespace PathSnip.Services.Snap
             if (!_lastWindowBounds.HasValue)
             {
                 return false;
+            }
+
+            if (windowSnap.WindowHandle.HasValue
+                && windowSnap.WindowHandle.Value != IntPtr.Zero
+                && _lastWindowHandle.HasValue
+                && _lastWindowHandle.Value != IntPtr.Zero
+                && windowSnap.WindowHandle.Value != _lastWindowHandle.Value)
+            {
+                return true;
             }
 
             Rect previous = _lastWindowBounds.Value;
