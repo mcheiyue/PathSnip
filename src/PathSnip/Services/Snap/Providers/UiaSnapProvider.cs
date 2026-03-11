@@ -184,7 +184,7 @@ namespace PathSnip.Services.Snap
             {
                 cancellationToken.ThrowIfCancellationRequested();
 
-                AutomationElement next = FindBestChildContainingPoint(current, physicalPoint);
+                AutomationElement next = FindBestChildContainingPoint(current, physicalPoint, cancellationToken);
                 if (next == null)
                 {
                     break;
@@ -196,7 +196,7 @@ namespace PathSnip.Services.Snap
             return current;
         }
 
-        private static AutomationElement FindBestChildContainingPoint(AutomationElement parent, Point physicalPoint)
+        private static AutomationElement FindBestChildContainingPoint(AutomationElement parent, Point physicalPoint, CancellationToken cancellationToken)
         {
             AutomationElement child;
             try
@@ -217,6 +217,8 @@ namespace PathSnip.Services.Snap
 
             while (child != null)
             {
+                cancellationToken.ThrowIfCancellationRequested();
+
                 Rect childBounds;
                 if (TryGetBounds(child, out childBounds) && !childBounds.IsEmpty && childBounds.Contains(physicalPoint))
                 {
