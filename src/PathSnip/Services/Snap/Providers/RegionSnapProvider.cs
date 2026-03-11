@@ -2,6 +2,7 @@ using System;
 using System.Diagnostics;
 using System.Runtime.InteropServices;
 using System.Windows;
+using PathSnip.Services;
 
 namespace PathSnip.Services.Snap
 {
@@ -72,13 +73,14 @@ namespace PathSnip.Services.Snap
                 var hitBounds = new Rect(rect.Left, rect.Top, rect.Right - rect.Left, rect.Bottom - rect.Top);
                 if (!IsMeaningfulRegion(hitBounds, physicalClientBounds))
                 {
-                    if (TryBuildChildWindowRegionSelection(windowHandle, profile, physicalClientBounds, physicalPoint, out RegionSelection childSelection))
+                    if (ShouldAttemptChildEnum(profile, physicalClientBounds, physicalPoint)
+                        && TryBuildChildWindowRegionSelection(windowHandle, profile, physicalClientBounds, physicalPoint, out RegionSelection childSelection))
                     {
                         regionSelection = childSelection;
                         regionSource = "child-enum";
                     }
-                    else
-                    if (ShouldUseSyntheticRegion(profile) && TryBuildSyntheticRegionSelection(profile, physicalClientBounds, physicalPoint, out RegionSelection syntheticSelection))
+                    else if (ShouldUseSyntheticRegion(profile)
+                        && TryBuildSyntheticRegionSelection(profile, physicalClientBounds, physicalPoint, out RegionSelection syntheticSelection))
                     {
                         regionSelection = syntheticSelection;
                         usedSynthetic = true;
@@ -98,12 +100,14 @@ namespace PathSnip.Services.Snap
             }
             else
             {
-                if (TryBuildChildWindowRegionSelection(windowHandle, profile, physicalClientBounds, physicalPoint, out RegionSelection childSelection))
+                if (ShouldAttemptChildEnum(profile, physicalClientBounds, physicalPoint)
+                    && TryBuildChildWindowRegionSelection(windowHandle, profile, physicalClientBounds, physicalPoint, out RegionSelection childSelection))
                 {
                     regionSelection = childSelection;
                     regionSource = "child-enum";
                 }
-                else if (ShouldUseSyntheticRegion(profile) && TryBuildSyntheticRegionSelection(profile, physicalClientBounds, physicalPoint, out RegionSelection syntheticSelection))
+                else if (ShouldUseSyntheticRegion(profile)
+                    && TryBuildSyntheticRegionSelection(profile, physicalClientBounds, physicalPoint, out RegionSelection syntheticSelection))
                 {
                     regionSelection = syntheticSelection;
                     usedSynthetic = true;
@@ -193,6 +197,29 @@ namespace PathSnip.Services.Snap
             return profile == RegionProfile.Browser || profile == RegionProfile.Ide;
         }
 
+        private static bool ShouldAttemptChildEnum(RegionProfile profile, Rect physicalClientBounds, Point physicalPoint)
+        {
+            if (profile != RegionProfile.Browser && profile != RegionProfile.Ide)
+            {
+                return false;
+            }
+
+            if (physicalClientBounds.IsEmpty || physicalClientBounds.Width <= 0 || physicalClientBounds.Height <= 0)
+            {
+                return false;
+            }
+
+            double yRatio = (physicalPoint.Y - physicalClientBounds.Top) / Math.Max(1, physicalClientBounds.Height);
+            yRatio = Clamp(yRatio, 0, 1);
+
+            if (profile == RegionProfile.Browser)
+            {
+                return yRatio <= 0.18;
+            }
+
+            return yRatio <= 0.16 || yRatio >= 0.68;
+        }
+
         private static bool TryBuildSyntheticRegionSelection(RegionProfile profile, Rect physicalClientBounds, Point physicalPoint, out RegionSelection selection)
         {
             selection = default;
@@ -235,6 +262,7 @@ namespace PathSnip.Services.Snap
             }
 
             var candidates = new System.Collections.Generic.List<Rect>();
+            var stopwatch = Stopwatch.StartNew();
             EnumChildWindows(windowHandle, (child, lParam) =>
             {
                 if (!IsWindowVisible(child))
@@ -268,6 +296,12 @@ namespace PathSnip.Services.Snap
                 candidates.Add(intersected);
                 return true;
             }, IntPtr.Zero);
+
+            stopwatch.Stop();
+            LogService.LogInfo(
+                "snap.region.child_enum",
+                $"elapsedMs={stopwatch.ElapsedMilliseconds} candidates={candidates.Count} profile={profile} source=child-enum",
+                stage: "region.child-enum");
 
             if (candidates.Count == 0)
             {
