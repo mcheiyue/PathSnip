@@ -94,6 +94,7 @@ namespace PathSnip
         private SnapResult _lastStableRegionSnap = SnapResult.None;
         private DateTime _lastRegionCandidateLogAt = DateTime.MinValue;
         private DateTime _lastRegionSelectLogAt = DateTime.MinValue;
+        private DateTime _lastRegionRejectLogAt = DateTime.MinValue;
         private DateTime _regionLockUntil = DateTime.MinValue;
         private int _regionFallbackMissCount;
         private bool _isFastPointerMotionState;
@@ -120,6 +121,7 @@ namespace PathSnip
         private const double ElementPromotionDwellRadiusPx = 6;
         private const double ElementPromotionMinAreaRatio = 0.03;
         private const double ElementPromotionMaxAreaRatio = 0.90;
+        private const double CycleLargeElementMinAreaRatio = 0.18;
         private readonly bool _enableSmartSnap;
         private readonly SmartSnapMode _smartSnapMode;
         private readonly bool _enableElementSnap;
@@ -448,6 +450,7 @@ namespace PathSnip
                     _currentSnapResult = SnapResult.None;
                     ResetRegionLockState();
                     MagnifierUI.Visibility = Visibility.Visible;
+                    UpdateMagnifierThrottled(mousePos);
                     return;
                 }
 
@@ -471,19 +474,7 @@ namespace PathSnip
                 // 显式恢复放大镜的可见性
                 MagnifierUI.Visibility = Visibility.Visible;
 
-                // 放大镜更新 - 节流优化
-                var nowMs = _stopwatch.ElapsedMilliseconds;
-                var timeSinceLastUpdate = nowMs - _lastMagnifierUpdateTime;
-                var distance = Math.Sqrt(
-                    Math.Pow(mousePos.X - _lastMagnifierPosition.X, 2) +
-                    Math.Pow(mousePos.Y - _lastMagnifierPosition.Y, 2));
-
-                if (timeSinceLastUpdate >= MagnifierThrottleMs || distance >= MagnifierMoveThreshold)
-                {
-                    _lastMagnifierUpdateTime = nowMs;
-                    _lastMagnifierPosition = mousePos;
-                    UpdateMagnifier(mousePos);
-                }
+                UpdateMagnifierThrottled(mousePos);
                 return;
             }
 
@@ -525,22 +516,36 @@ namespace PathSnip
 
             SnapResult snapResult = windowSnap;
             bool regionSelected = false;
-            if (_enableSmartSnap && _smartSnapMode != SmartSnapMode.ManualOnly && !_isSnapBypassedByAlt)
+            SnapResult regionSnap = SnapResult.None;
+            string regionSource = "unknown";
+            string profileLabel = "Unknown";
+            double areaRatio = 0;
+            string rejectReason = null;
+            bool suppressUnknownNearFull = false;
+
+            if (_smartSnapMode == SmartSnapMode.WindowOnly)
             {
-                SnapResult regionSnap = _snapEngine.TryGetRegionSnap(cursorScreenPoint, _currentProcessId, windowSnap);
+                ResetRegionLockState();
+            }
+
+            if (_enableSmartSnap && _smartSnapMode != SmartSnapMode.ManualOnly && !_isSnapBypassedByAlt && _smartSnapMode != SmartSnapMode.WindowOnly)
+            {
+                regionSnap = _snapEngine.TryGetRegionSnap(cursorScreenPoint, _currentProcessId, windowSnap);
                 if (regionSnap.IsValid && regionSnap.Bounds.HasValue && windowSnap.IsValid && windowSnap.Bounds.HasValue)
                 {
                     double windowArea = Math.Max(1, windowSnap.Bounds.Value.Width * windowSnap.Bounds.Value.Height);
                     double regionArea = Math.Max(1, regionSnap.Bounds.Value.Width * regionSnap.Bounds.Value.Height);
-                    double areaRatio = regionArea / windowArea;
-                    string regionSource = regionSnap.RegionCandidate?.Label ?? "unknown";
+                    areaRatio = regionArea / windowArea;
+                    regionSource = regionSnap.RegionCandidate?.Label ?? "unknown";
+                    profileLabel = RegionSnapProvider.ResolveProfileLabel(regionSnap.WindowHandle.GetValueOrDefault(IntPtr.Zero));
+                    suppressUnknownNearFull = profileLabel == "Unknown" && areaRatio >= 0.98;
 
-                    if ((now - _lastRegionCandidateLogAt).TotalMilliseconds >= 250)
+                    if (!suppressUnknownNearFull && (now - _lastRegionCandidateLogAt).TotalMilliseconds >= 250)
                     {
                         _lastRegionCandidateLogAt = now;
                         LogService.LogInfo(
                             "snap.region.candidate",
-                            $"kind={regionSnap.RegionKind} source={regionSource} bounds=({regionSnap.Bounds?.Left:F1},{regionSnap.Bounds?.Top:F1},{regionSnap.Bounds?.Width:F1},{regionSnap.Bounds?.Height:F1}) areaRatio={areaRatio:F3} fast={isFastPointerMotion}",
+                            $"profile={profileLabel} reason=candidate_observed kind={regionSnap.RegionKind} source={regionSource} bounds=({regionSnap.Bounds?.Left:F1},{regionSnap.Bounds?.Top:F1},{regionSnap.Bounds?.Width:F1},{regionSnap.Bounds?.Height:F1}) areaRatio={areaRatio:F3} fast={isFastPointerMotion}",
                             stage: "region.candidate");
                     }
 
@@ -567,17 +572,51 @@ namespace PathSnip
                             _lastRegionSelectLogAt = now;
                             LogService.LogInfo(
                                 "snap.region.selected",
-                                $"kind={regionSnap.RegionKind} source={regionSource} bounds=({regionSnap.Bounds?.Left:F1},{regionSnap.Bounds?.Top:F1},{regionSnap.Bounds?.Width:F1},{regionSnap.Bounds?.Height:F1}) areaRatio={areaRatio:F3}",
+                                $"profile={profileLabel} reason=area_ratio_pass kind={regionSnap.RegionKind} source={regionSource} bounds=({regionSnap.Bounds?.Left:F1},{regionSnap.Bounds?.Top:F1},{regionSnap.Bounds?.Width:F1},{regionSnap.Bounds?.Height:F1}) areaRatio={areaRatio:F3}",
                                 stage: "region.select");
                         }
+                    }
+                    else
+                    {
+                        rejectReason = isFastPointerMotion ? "fast_pointer_skip" : "area_ratio_fail";
                     }
                 }
             }
 
-            if (!regionSelected && TryKeepRegionLock(windowSnap, cursorScreenPoint, now, out SnapResult heldRegion))
+            if (!regionSelected && _smartSnapMode != SmartSnapMode.WindowOnly && TryKeepRegionLock(windowSnap, cursorScreenPoint, now, out SnapResult heldRegion))
             {
                 snapResult = heldRegion;
                 regionSelected = true;
+
+                if ((now - _lastRegionSelectLogAt).TotalMilliseconds >= 250)
+                {
+                    _lastRegionSelectLogAt = now;
+                    regionSource = heldRegion.RegionCandidate?.Label ?? "unknown";
+                    profileLabel = RegionSnapProvider.ResolveProfileLabel(heldRegion.WindowHandle.GetValueOrDefault(IntPtr.Zero));
+                    if (windowSnap.IsValid && windowSnap.Bounds.HasValue && heldRegion.Bounds.HasValue)
+                    {
+                        double windowArea = Math.Max(1, windowSnap.Bounds.Value.Width * windowSnap.Bounds.Value.Height);
+                        double regionArea = Math.Max(1, heldRegion.Bounds.Value.Width * heldRegion.Bounds.Value.Height);
+                        areaRatio = regionArea / windowArea;
+                    }
+
+                    LogService.LogInfo(
+                        "snap.region.selected",
+                        $"profile={profileLabel} reason=lock_kept kind={heldRegion.RegionKind} source={regionSource} bounds=({heldRegion.Bounds?.Left:F1},{heldRegion.Bounds?.Top:F1},{heldRegion.Bounds?.Width:F1},{heldRegion.Bounds?.Height:F1}) areaRatio={areaRatio:F3}",
+                        stage: "region.select");
+                }
+            }
+
+            if (regionSnap.IsValid && !regionSelected && snapResult.Kind != SnapKind.Region && !string.IsNullOrWhiteSpace(rejectReason))
+            {
+                if (!suppressUnknownNearFull && (now - _lastRegionRejectLogAt).TotalMilliseconds >= 250)
+                {
+                    _lastRegionRejectLogAt = now;
+                    LogService.LogInfo(
+                        "snap.region.rejected",
+                        $"profile={profileLabel} reason={rejectReason} kind={regionSnap.RegionKind} source={regionSource} bounds=({regionSnap.Bounds?.Left:F1},{regionSnap.Bounds?.Top:F1},{regionSnap.Bounds?.Width:F1},{regionSnap.Bounds?.Height:F1}) areaRatio={areaRatio:F3} fast={isFastPointerMotion}",
+                        stage: "region.reject");
+                }
             }
 
             if (!_snapEngine.IsCurrentWindowRequest(requestVersion))
@@ -847,6 +886,22 @@ namespace PathSnip
 
             // 更新放大镜位置（考虑屏幕边缘碰撞）
             UpdateMagnifierPosition(mousePos);
+        }
+
+        private void UpdateMagnifierThrottled(Point mousePos)
+        {
+            var nowMs = _stopwatch.ElapsedMilliseconds;
+            var timeSinceLastUpdate = nowMs - _lastMagnifierUpdateTime;
+            var distance = Math.Sqrt(
+                Math.Pow(mousePos.X - _lastMagnifierPosition.X, 2) +
+                Math.Pow(mousePos.Y - _lastMagnifierPosition.Y, 2));
+
+            if (timeSinceLastUpdate >= MagnifierThrottleMs || distance >= MagnifierMoveThreshold)
+            {
+                _lastMagnifierUpdateTime = nowMs;
+                _lastMagnifierPosition = mousePos;
+                UpdateMagnifier(mousePos);
+            }
         }
 
         private void UpdateMagnifierPosition(Point mousePos)
@@ -1583,7 +1638,8 @@ namespace PathSnip
             return !_selectionCompleted
                 && !_selectionSession.IsSelecting
                 && _enableSmartSnap
-                && _smartSnapMode != SmartSnapMode.ManualOnly;
+                && _smartSnapMode != SmartSnapMode.ManualOnly
+                && _smartSnapMode != SmartSnapMode.WindowOnly;
         }
 
         private bool CanHandleBypassShortcut()
@@ -1616,18 +1672,24 @@ namespace PathSnip
                     return await CycleSnapTargetAsync(false);
 
                 case OverlayShortcutAction.BypassOn:
-                    _isSnapBypassedByAlt = true;
-                    StopElementSnapUpgrade();
-                    if (WindowHighlightRect != null)
+                    if (!_isSnapBypassedByAlt)
                     {
-                        WindowHighlightRect.Visibility = Visibility.Collapsed;
+                        _isSnapBypassedByAlt = true;
+                        StopElementSnapUpgrade();
+                        if (WindowHighlightRect != null)
+                        {
+                            WindowHighlightRect.Visibility = Visibility.Collapsed;
+                        }
+                        LogService.LogInfo("snap.mode.bypass_alt", "alt bypass enabled", stage: "shortcut");
                     }
-                    LogService.LogInfo("snap.mode.bypass_alt", "alt bypass enabled", stage: "shortcut");
                     return true;
 
                 case OverlayShortcutAction.BypassOff:
-                    _isSnapBypassedByAlt = false;
-                    LogService.LogInfo("snap.mode.bypass_alt", "alt bypass disabled", stage: "shortcut");
+                    if (_isSnapBypassedByAlt)
+                    {
+                        _isSnapBypassedByAlt = false;
+                        LogService.LogInfo("snap.mode.bypass_alt", "alt bypass disabled", stage: "shortcut");
+                    }
                     return true;
 
                 default:
@@ -1642,7 +1704,7 @@ namespace PathSnip
                 return false;
             }
 
-            if (!_enableSmartSnap || _smartSnapMode == SmartSnapMode.ManualOnly)
+            if (!_enableSmartSnap || _smartSnapMode == SmartSnapMode.ManualOnly || _smartSnapMode == SmartSnapMode.WindowOnly)
             {
                 return false;
             }
@@ -1653,70 +1715,135 @@ namespace PathSnip
             }
 
             Point screenPoint = _lastPointerScreenPoint;
+            var now = DateTime.Now;
 
-            if (_currentSnapResult.IsValid && _currentSnapResult.Kind == SnapKind.Element)
+            SnapResult windowSnap = _currentWindowSnap;
+            if (!windowSnap.IsValid)
             {
-                SnapResult windowSnap = _snapEngine.GetCurrentSnap(screenPoint, _currentProcessId);
+                windowSnap = _snapEngine.GetCurrentSnap(screenPoint, _currentProcessId);
                 if (!windowSnap.IsValid)
                 {
                     return false;
                 }
 
                 _currentWindowSnap = windowSnap;
-                _currentSnapResult = windowSnap;
+            }
+
+            if (_currentSnapResult.IsValid && _currentSnapResult.Kind == SnapKind.Element)
+            {
+                SnapResult regionSnap = SnapResult.None;
+                if (_lastStableRegionSnap.IsValid && _lastStableRegionSnap.Bounds.HasValue && IsSameWindow(_lastStableRegionSnap, windowSnap))
+                {
+                    regionSnap = _lastStableRegionSnap;
+                }
+                else
+                {
+                    regionSnap = _snapEngine.TryGetRegionSnap(screenPoint, _currentProcessId, windowSnap);
+                }
+
+                if (!regionSnap.IsValid || !regionSnap.Bounds.HasValue)
+                {
+                    return false;
+                }
+
+                _currentSnapResult = regionSnap;
+                _snapIntentMode = SnapIntentMode.WindowLock;
+                RememberStableRegion(regionSnap, now);
                 ApplySnapHighlight(_currentSnapResult);
                 return true;
             }
 
-            if (!forward)
+            if (_currentSnapResult.IsValid && _currentSnapResult.Kind == SnapKind.Region)
             {
-                return false;
-            }
-
-            if (!_enableElementSnap || _smartSnapMode == SmartSnapMode.WindowOnly)
-            {
-                return false;
-            }
-
-            if (!_currentSnapResult.IsValid)
-            {
-                SnapResult windowSnap = _snapEngine.GetCurrentSnap(screenPoint, _currentProcessId);
-                if (!windowSnap.IsValid)
+                if (!_enableElementSnap)
                 {
                     return false;
                 }
 
-                _currentWindowSnap = windowSnap;
-                _currentSnapResult = windowSnap;
-            }
+                long requestVersion = _snapEngine.NextElementRequestVersion();
+                SnapResult upgradedSnap = await _snapEngine.TryGetElementSnapAsync(
+                    screenPoint,
+                    _currentProcessId,
+                    windowSnap,
+                    requestVersion,
+                    ElementSnapTimeoutMs,
+                    CancellationToken.None,
+                    LogService.CreateOperationId("snap"));
 
-            if (!_currentWindowSnap.IsValid)
-            {
-                SnapResult windowSnap = _snapEngine.GetCurrentSnap(screenPoint, _currentProcessId);
-                if (!windowSnap.IsValid)
+                if (!_snapEngine.IsCurrentElementRequest(requestVersion) || !upgradedSnap.IsValid || !upgradedSnap.Bounds.HasValue || !windowSnap.Bounds.HasValue)
                 {
                     return false;
                 }
 
-                _currentWindowSnap = windowSnap;
+                Rect windowBounds = windowSnap.Bounds.Value;
+                Rect elementBounds = upgradedSnap.Bounds.Value;
+                double windowArea = Math.Max(1, windowBounds.Width * windowBounds.Height);
+                double elementArea = Math.Max(1, elementBounds.Width * elementBounds.Height);
+                double ratio = elementArea / windowArea;
+                if (ratio < CycleLargeElementMinAreaRatio || ratio > ElementPromotionMaxAreaRatio)
+                {
+                    return false;
+                }
+
+                _currentSnapResult = upgradedSnap;
+                _snapIntentMode = SnapIntentMode.ElementLock;
+                _elementLockUntil = now.AddMilliseconds(ElementLockGraceMs);
+                ApplySnapHighlight(_currentSnapResult);
+                return true;
             }
 
-            long requestVersion = _snapEngine.NextElementRequestVersion();
-            SnapResult upgradedSnap = await _snapEngine.TryGetElementSnapAsync(
+            SnapResult regionCandidate = SnapResult.None;
+            if (_lastStableRegionSnap.IsValid && _lastStableRegionSnap.Bounds.HasValue && IsSameWindow(_lastStableRegionSnap, windowSnap))
+            {
+                regionCandidate = _lastStableRegionSnap;
+            }
+            else
+            {
+                regionCandidate = _snapEngine.TryGetRegionSnap(screenPoint, _currentProcessId, windowSnap);
+            }
+
+            if (regionCandidate.IsValid && regionCandidate.Bounds.HasValue)
+            {
+                _currentSnapResult = regionCandidate;
+                _snapIntentMode = SnapIntentMode.WindowLock;
+                RememberStableRegion(regionCandidate, now);
+                ApplySnapHighlight(_currentSnapResult);
+                return true;
+            }
+
+            if (!_enableElementSnap)
+            {
+                return false;
+            }
+
+            long fallbackRequestVersion = _snapEngine.NextElementRequestVersion();
+            SnapResult fallbackSnap = await _snapEngine.TryGetElementSnapAsync(
                 screenPoint,
                 _currentProcessId,
-                _currentWindowSnap,
-                requestVersion,
+                windowSnap,
+                fallbackRequestVersion,
                 ElementSnapTimeoutMs,
                 CancellationToken.None,
                 LogService.CreateOperationId("snap"));
 
-            if (!_snapEngine.IsCurrentElementRequest(requestVersion) || !upgradedSnap.IsValid || !upgradedSnap.Bounds.HasValue)
+            if (!_snapEngine.IsCurrentElementRequest(fallbackRequestVersion) || !fallbackSnap.IsValid || !fallbackSnap.Bounds.HasValue || !windowSnap.Bounds.HasValue)
             {
                 return false;
             }
 
-            _currentSnapResult = upgradedSnap;
+            Rect fallbackWindowBounds = windowSnap.Bounds.Value;
+            Rect fallbackElementBounds = fallbackSnap.Bounds.Value;
+            double fallbackWindowArea = Math.Max(1, fallbackWindowBounds.Width * fallbackWindowBounds.Height);
+            double fallbackElementArea = Math.Max(1, fallbackElementBounds.Width * fallbackElementBounds.Height);
+            double fallbackRatio = fallbackElementArea / fallbackWindowArea;
+            if (fallbackRatio < CycleLargeElementMinAreaRatio || fallbackRatio > ElementPromotionMaxAreaRatio)
+            {
+                return false;
+            }
+
+            _currentSnapResult = fallbackSnap;
+            _snapIntentMode = SnapIntentMode.ElementLock;
+            _elementLockUntil = now.AddMilliseconds(ElementLockGraceMs);
             ApplySnapHighlight(_currentSnapResult);
             return true;
         }
