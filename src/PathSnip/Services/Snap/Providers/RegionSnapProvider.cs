@@ -426,6 +426,28 @@ namespace PathSnip.Services.Snap
             return RegionProfile.Unknown;
         }
 
+        public static string ResolveProfileLabel(IntPtr windowHandle)
+        {
+            if (windowHandle == IntPtr.Zero)
+            {
+                return "Unknown";
+            }
+
+            string processName = ResolveProcessName(windowHandle);
+            RegionProfile profile = ResolveRegionProfile(processName);
+            switch (profile)
+            {
+                case RegionProfile.Explorer:
+                    return "Explorer";
+                case RegionProfile.Browser:
+                    return "Browser";
+                case RegionProfile.Ide:
+                    return "Ide";
+                default:
+                    return "Unknown";
+            }
+        }
+
         private static bool IsBrowserProcess(string processName)
         {
             return string.Equals(processName, "chrome", StringComparison.OrdinalIgnoreCase)
