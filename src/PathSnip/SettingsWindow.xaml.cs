@@ -289,7 +289,12 @@ namespace PathSnip
                 config.ShowNotification = ShowNotificationCheckBox.IsChecked == true;
 
                 // 保存剪贴板模式
-                var clipboardModeTag = (ClipboardModeComboBox.SelectedItem as System.Windows.Controls.ComboBoxItem).Tag.ToString();
+                var clipboardModeSelectedItem = ClipboardModeComboBox.SelectedItem as System.Windows.Controls.ComboBoxItem;
+                var clipboardModeTag = clipboardModeSelectedItem?.Tag as string ?? clipboardModeSelectedItem?.Tag?.ToString();
+                if (string.IsNullOrWhiteSpace(clipboardModeTag))
+                {
+                    clipboardModeTag = "PathOnly";
+                }
                 switch (clipboardModeTag)
                 {
                     case "ImageOnly":
@@ -304,7 +309,12 @@ namespace PathSnip
                 }
 
                 // 保存路径格式
-                var pathFormatTag = (PathFormatComboBox.SelectedItem as System.Windows.Controls.ComboBoxItem).Tag.ToString();
+                var pathFormatSelectedItem = PathFormatComboBox.SelectedItem as System.Windows.Controls.ComboBoxItem;
+                var pathFormatTag = pathFormatSelectedItem?.Tag as string ?? pathFormatSelectedItem?.Tag?.ToString();
+                if (string.IsNullOrWhiteSpace(pathFormatTag))
+                {
+                    pathFormatTag = "Text";
+                }
                 config.PathFormat = pathFormatTag;
 
                 // 保存文件名模板
@@ -314,7 +324,12 @@ namespace PathSnip
                 config.EnableElementSnap = EnableElementSnapCheckBox.IsChecked == true;
                 config.HoldAltToBypassSnap = HoldAltToBypassSnapCheckBox.IsChecked == true;
 
-                var snapModeTag = (SmartSnapModeComboBox.SelectedItem as System.Windows.Controls.ComboBoxItem).Tag.ToString();
+                var snapModeSelectedItem = SmartSnapModeComboBox.SelectedItem as System.Windows.Controls.ComboBoxItem;
+                var snapModeTag = snapModeSelectedItem?.Tag as string ?? snapModeSelectedItem?.Tag?.ToString();
+                if (string.IsNullOrWhiteSpace(snapModeTag))
+                {
+                    snapModeTag = "Auto";
+                }
                 switch (snapModeTag)
                 {
                     case "WindowOnly":
