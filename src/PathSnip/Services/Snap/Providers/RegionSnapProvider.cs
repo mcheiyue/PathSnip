@@ -26,6 +26,13 @@ namespace PathSnip.Services.Snap
                 return SnapResult.None;
             }
 
+            if (currentProcessId > 0
+                && TryGetWindowProcessId(windowHandle, out uint windowProcessId)
+                && windowProcessId == (uint)currentProcessId)
+            {
+                return SnapResult.None;
+            }
+
             Rect logicalWindowBounds = windowSnap.Bounds.Value;
             Rect physicalWindowBounds;
             if (!TryGetPhysicalWindowBounds(windowHandle, out physicalWindowBounds))
@@ -59,19 +66,28 @@ namespace PathSnip.Services.Snap
             RegionProfile profile = ResolveRegionProfile(processName);
 
             IntPtr regionHandle = ResolveRegionHwnd(windowHandle, physicalPoint);
+
+            if (regionHandle != IntPtr.Zero
+                && currentProcessId > 0
+                && TryGetWindowProcessId(regionHandle, out uint regionProcessId)
+                && regionProcessId == (uint)currentProcessId)
+            {
+                regionHandle = IntPtr.Zero;
+            }
+
             bool usedSynthetic = false;
             string regionSource = "child-hit";
             RegionSelection regionSelection;
             if (regionHandle != IntPtr.Zero && regionHandle != windowHandle)
             {
                 RECT rect;
-                if (!GetWindowRect(regionHandle, out rect) || rect.Right <= rect.Left || rect.Bottom <= rect.Top)
-                {
-                    return SnapResult.None;
-                }
 
-                var hitBounds = new Rect(rect.Left, rect.Top, rect.Right - rect.Left, rect.Bottom - rect.Top);
-                if (!IsMeaningfulRegion(hitBounds, physicalClientBounds))
+                bool hasHitRect = GetWindowRect(regionHandle, out rect) && rect.Right > rect.Left && rect.Bottom > rect.Top;
+                Rect hitBounds = hasHitRect
+                    ? new Rect(rect.Left, rect.Top, rect.Right - rect.Left, rect.Bottom - rect.Top)
+                    : Rect.Empty;
+
+                if (!hasHitRect || !IsMeaningfulRegion(hitBounds, physicalClientBounds))
                 {
                     if (ShouldAttemptChildEnum(profile, physicalClientBounds, physicalPoint)
                         && TryBuildChildWindowRegionSelection(windowHandle, profile, physicalClientBounds, physicalPoint, out RegionSelection childSelection))
@@ -262,10 +278,17 @@ namespace PathSnip.Services.Snap
             }
 
             var candidates = new System.Collections.Generic.List<Rect>();
+            uint currentProcessId = (uint)Process.GetCurrentProcess().Id;
             var stopwatch = Stopwatch.StartNew();
             EnumChildWindows(windowHandle, (child, lParam) =>
             {
                 if (!IsWindowVisible(child))
+                {
+                    return true;
+                }
+
+                uint childProcessId;
+                if (!TryGetWindowProcessId(child, out childProcessId) || childProcessId == currentProcessId)
                 {
                     return true;
                 }
