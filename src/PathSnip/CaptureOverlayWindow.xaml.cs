@@ -122,6 +122,42 @@ namespace PathSnip
         private const double ElementPromotionMinAreaRatio = 0.03;
         private const double ElementPromotionMaxAreaRatio = 0.90;
         private const double CycleLargeElementMinAreaRatio = 0.18;
+
+        private readonly struct AdaptiveTuningParams
+        {
+            public readonly int MagnifierThrottleMs;
+            public readonly double MagnifierMoveThreshold;
+            public readonly int ElementHoverDelayMs;
+            public readonly int ElementProbeMinIntervalMs;
+
+            public AdaptiveTuningParams(int magnifierThrottleMs, double magnifierMoveThreshold, int elementHoverDelayMs, int elementProbeMinIntervalMs)
+            {
+                MagnifierThrottleMs = magnifierThrottleMs;
+                MagnifierMoveThreshold = magnifierMoveThreshold;
+                ElementHoverDelayMs = elementHoverDelayMs;
+                ElementProbeMinIntervalMs = elementProbeMinIntervalMs;
+            }
+        }
+
+        private static AdaptiveTuningParams GetAdaptiveTuningParams(double pointerSpeedPxPerSecond, bool isFastPointerMotion)
+        {
+            if (isFastPointerMotion || pointerSpeedPxPerSecond >= FastPointerSpeedThreshold)
+            {
+                return new AdaptiveTuningParams(32, 4, 100, 300);
+            }
+
+            if (pointerSpeedPxPerSecond > FastPointerRecoverSpeedThreshold && pointerSpeedPxPerSecond < FastPointerSpeedThreshold)
+            {
+                return new AdaptiveTuningParams(24, 3, 80, 240);
+            }
+
+            if (pointerSpeedPxPerSecond > ElementPromotionSpeedThreshold && pointerSpeedPxPerSecond <= FastPointerRecoverSpeedThreshold)
+            {
+                return new AdaptiveTuningParams(MagnifierThrottleMs, MagnifierMoveThreshold, 60, 180);
+            }
+
+            return new AdaptiveTuningParams(MagnifierThrottleMs, MagnifierMoveThreshold, ElementSnapHoverDelayMs, ElementProbeMinIntervalMs);
+        }
         private readonly bool _enableSmartSnap;
         private readonly SmartSnapMode _smartSnapMode;
         private readonly bool _enableElementSnap;
@@ -668,11 +704,14 @@ namespace PathSnip
                 return;
             }
 
+            var adaptive = GetAdaptiveTuningParams(_pointerSpeedPxPerSecond, IsFastPointerMotion());
+
             if (_lastElementProbeRequestedAt != DateTime.MinValue &&
-                (now - _lastElementProbeRequestedAt).TotalMilliseconds < ElementProbeMinIntervalMs)
+                (now - _lastElementProbeRequestedAt).TotalMilliseconds < adaptive.ElementProbeMinIntervalMs)
             {
                 if (!_elementSnapHoverTimer.IsEnabled)
                 {
+                    _elementSnapHoverTimer.Interval = TimeSpan.FromMilliseconds(adaptive.ElementHoverDelayMs);
                     _elementSnapHoverTimer.Start();
                 }
                 return;
@@ -707,6 +746,7 @@ namespace PathSnip
 
             if (!_elementSnapHoverTimer.IsEnabled)
             {
+                _elementSnapHoverTimer.Interval = TimeSpan.FromMilliseconds(adaptive.ElementHoverDelayMs);
                 _elementSnapHoverTimer.Start();
             }
         }
@@ -731,14 +771,16 @@ namespace PathSnip
             }
 
             var now = DateTime.Now;
+            var adaptive = GetAdaptiveTuningParams(_pointerSpeedPxPerSecond, IsFastPointerMotion());
             if (IsFastPointerMotion() || !CanPromoteToElement(now))
             {
                 return;
             }
 
             if (_lastElementProbeRequestedAt != DateTime.MinValue &&
-                (now - _lastElementProbeRequestedAt).TotalMilliseconds < ElementProbeMinIntervalMs)
+                (now - _lastElementProbeRequestedAt).TotalMilliseconds < adaptive.ElementProbeMinIntervalMs)
             {
+                _elementSnapHoverTimer.Interval = TimeSpan.FromMilliseconds(adaptive.ElementHoverDelayMs);
                 _elementSnapHoverTimer.Start();
                 return;
             }
@@ -807,6 +849,8 @@ namespace PathSnip
                 {
                     _hasPendingElementProbe = false;
                     _lastHoverMousePosition = _pendingProbeMousePosition;
+                    var adaptiveForPendingProbe = GetAdaptiveTuningParams(_pointerSpeedPxPerSecond, IsFastPointerMotion());
+                    _elementSnapHoverTimer.Interval = TimeSpan.FromMilliseconds(adaptiveForPendingProbe.ElementHoverDelayMs);
                     _elementSnapHoverTimer.Start();
                 }
             }
@@ -903,7 +947,8 @@ namespace PathSnip
                 Math.Pow(mousePos.X - _lastMagnifierPosition.X, 2) +
                 Math.Pow(mousePos.Y - _lastMagnifierPosition.Y, 2));
 
-            if (timeSinceLastUpdate >= MagnifierThrottleMs || distance >= MagnifierMoveThreshold)
+            var adaptive = GetAdaptiveTuningParams(_pointerSpeedPxPerSecond, IsFastPointerMotion());
+            if (timeSinceLastUpdate >= adaptive.MagnifierThrottleMs || distance >= adaptive.MagnifierMoveThreshold)
             {
                 _lastMagnifierUpdateTime = nowMs;
                 _lastMagnifierPosition = mousePos;
