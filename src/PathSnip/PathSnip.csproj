@@ -4,6 +4,11 @@
     <OutputType>WinExe</OutputType>
     <TargetFramework>net48</TargetFramework>
     <UseWPF>true</UseWPF>
+    <EnableDefaultItems>true</EnableDefaultItems>
+    <DisableImplicitWildcardItems>false</DisableImplicitWildcardItems>
+    <EnableDefaultCompileItems>false</EnableDefaultCompileItems>
+    <EnableDefaultPageItems>false</EnableDefaultPageItems>
+    <EnableDefaultEmbeddedResourceItems>false</EnableDefaultEmbeddedResourceItems>
     <LangVersion>7.3</LangVersion>
     <ApplicationIcon>Resources\PathSnip.ico</ApplicationIcon>
     <AssemblyName>PathSnip</AssemblyName>
@@ -31,6 +36,58 @@
 
   <ItemGroup>
     <Resource Include="Resources\PathSnip.ico" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Page Include="MainWindow.xaml" />
+    <Page Include="SettingsWindow.xaml" />
+    <Page Include="CaptureOverlayWindow.xaml" />
+    <Page Include="PinnedImageWindow.xaml" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Compile Include="App.xaml.cs" />
+    <Compile Include="CaptureOverlayWindow.xaml.cs" />
+    <Compile Include="Helpers\MagnifierHelper.cs" />
+    <Compile Include="MainWindow.xaml.cs" />
+    <Compile Include="PinnedImageWindow.xaml.cs" />
+    <Compile Include="Services\ClipboardService.cs" />
+    <Compile Include="Services\ConfigService.cs" />
+    <Compile Include="Services\FileService.cs" />
+    <Compile Include="Services\HotkeyService.cs" />
+    <Compile Include="Services\LogService.cs" />
+    <Compile Include="Services\Overlay\OverlayShortcutHandler.cs" />
+    <Compile Include="Services\Overlay\SelectionBitmapComposer.cs" />
+    <Compile Include="Services\Overlay\SelectionSession.cs" />
+    <Compile Include="Services\ScreenCaptureService.cs" />
+    <Compile Include="Services\Snap\Engine\SnapEngine.cs" />
+    <Compile Include="Services\Snap\ISnapService.cs" />
+    <Compile Include="Services\Snap\Policies\SnapAppProfile.cs" />
+    <Compile Include="Services\Snap\Policies\SnapIgnorePolicy.cs" />
+    <Compile Include="Services\Snap\Policies\SnapRankingPolicy.cs" />
+    <Compile Include="Services\Snap\Policies\SnapStabilizer.cs" />
+    <Compile Include="Services\Snap\Providers\ISnapProvider.cs" />
+    <Compile Include="Services\Snap\Providers\MsaaSnapProvider.cs" />
+    <Compile Include="Services\Snap\Providers\RegionSnapProvider.cs" />
+    <Compile Include="Services\Snap\Providers\UiaSnapProvider.cs" />
+    <Compile Include="Services\Snap\Providers\WindowSnapProvider.cs" />
+    <Compile Include="Services\Snap\RegionCandidate.cs" />
+    <Compile Include="Services\Snap\RegionKind.cs" />
+    <Compile Include="Services\Snap\SnapResult.cs" />
+    <Compile Include="Services\Snap\WindowSnapService.cs" />
+    <Compile Include="Services\StartWithWindowsHelper.cs" />
+    <Compile Include="Services\WindowDetectionService.cs" />
+    <Compile Include="SettingsWindow.xaml.cs" />
+    <Compile Include="Tools\AnnotationToolContext.cs" />
+    <Compile Include="Tools\AnnotationToolFactory.cs" />
+    <Compile Include="Tools\ArrowTool.cs" />
+    <Compile Include="Tools\HighlighterTool.cs" />
+    <Compile Include="Tools\IAnnotationTool.cs" />
+    <Compile Include="Tools\MosaicTool.cs" />
+    <Compile Include="Tools\RectangleTool.cs" />
+    <Compile Include="Tools\StepMarkerTool.cs" />
+    <Compile Include="Tools\TextTool.cs" />
+    <Compile Include="Tools\UndoAction.cs" />
   </ItemGroup>
 
   <ItemGroup>
