@@ -982,6 +982,12 @@ namespace PathSnip
 
         private void ShowToolbar()
         {
+            if (_currentRect.IsEmpty || _currentRect.Width <= 0 || _currentRect.Height <= 0)
+            {
+                Toolbar.Visibility = Visibility.Collapsed;
+                return;
+            }
+
             HintText.Visibility = Visibility.Collapsed;
             Toolbar.Visibility = Visibility.Visible;
             Toolbar.Measure(new Size(double.PositiveInfinity, double.PositiveInfinity));
@@ -2675,6 +2681,7 @@ namespace PathSnip
         {
             // 锚点上的右键点击触发取消选区（Level 2）
             e.Handled = true;
+            (sender as Thumb)?.ReleaseMouseCapture();
             ResetToSelectingState();
         }
 
@@ -2710,6 +2717,11 @@ namespace PathSnip
             ResizeBottomRight.Cursor = Cursors.SizeNWSE;
             ResizeTopRight.Cursor = Cursors.SizeNESW;
             ResizeBottomLeft.Cursor = Cursors.SizeNESW;
+
+            if (e.Canceled) return;
+            if (!_selectionCompleted) return;
+            if (_currentRect.IsEmpty) return;
+            if (_currentRect.Width <= 0 || _currentRect.Height <= 0) return;
 
             // 拖拽结束后，ShowToolbar 会根据新的 _currentRect 重新定位工具栏
             ShowToolbar();
