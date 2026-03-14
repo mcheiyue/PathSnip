@@ -454,8 +454,8 @@ namespace PathSnip
                     return;
                 }
 
-                // 窗口吸附检测（50ms 节流）
-                if ((now - _lastWindowDetectionTime).TotalMilliseconds >= 50)
+                // 窗口吸附检测（80ms 节流）
+                if ((now - _lastWindowDetectionTime).TotalMilliseconds >= 80)
                 {
                     _lastWindowDetectionTime = now;
                     long requestVersion = _snapEngine.NextWindowRequestVersion();
@@ -530,55 +530,62 @@ namespace PathSnip
 
             if (_enableSmartSnap && _smartSnapMode != SmartSnapMode.ManualOnly && !_isSnapBypassedByAlt && _smartSnapMode != SmartSnapMode.WindowOnly)
             {
-                regionSnap = _snapEngine.TryGetRegionSnap(cursorScreenPoint, _currentProcessId, windowSnap);
-                if (regionSnap.IsValid && regionSnap.Bounds.HasValue && windowSnap.IsValid && windowSnap.Bounds.HasValue)
+                if (isFastPointerMotion)
                 {
-                    double windowArea = Math.Max(1, windowSnap.Bounds.Value.Width * windowSnap.Bounds.Value.Height);
-                    double regionArea = Math.Max(1, regionSnap.Bounds.Value.Width * regionSnap.Bounds.Value.Height);
-                    areaRatio = regionArea / windowArea;
-                    regionSource = regionSnap.RegionCandidate?.Label ?? "unknown";
-                    profileLabel = RegionSnapProvider.ResolveProfileLabel(regionSnap.WindowHandle.GetValueOrDefault(IntPtr.Zero));
-                    suppressUnknownNearFull = profileLabel == "Unknown" && areaRatio >= 0.98;
-
-                    if (!suppressUnknownNearFull && (now - _lastRegionCandidateLogAt).TotalMilliseconds >= 250)
+                    rejectReason = "fast_pointer_skip";
+                }
+                else
+                {
+                    regionSnap = _snapEngine.TryGetRegionSnap(cursorScreenPoint, _currentProcessId, windowSnap);
+                    if (regionSnap.IsValid && regionSnap.Bounds.HasValue && windowSnap.IsValid && windowSnap.Bounds.HasValue)
                     {
-                        _lastRegionCandidateLogAt = now;
-                        LogService.LogInfo(
-                            "snap.region.candidate",
-                            $"profile={profileLabel} reason=candidate_observed kind={regionSnap.RegionKind} source={regionSource} bounds=({regionSnap.Bounds?.Left:F1},{regionSnap.Bounds?.Top:F1},{regionSnap.Bounds?.Width:F1},{regionSnap.Bounds?.Height:F1}) areaRatio={areaRatio:F3} fast={isFastPointerMotion}",
-                            stage: "region.candidate");
-                    }
+                        double windowArea = Math.Max(1, windowSnap.Bounds.Value.Width * windowSnap.Bounds.Value.Height);
+                        double regionArea = Math.Max(1, regionSnap.Bounds.Value.Width * regionSnap.Bounds.Value.Height);
+                        areaRatio = regionArea / windowArea;
+                        regionSource = regionSnap.RegionCandidate?.Label ?? "unknown";
+                        profileLabel = RegionSnapProvider.ResolveProfileLabel(regionSnap.WindowHandle.GetValueOrDefault(IntPtr.Zero));
+                        suppressUnknownNearFull = profileLabel == "Unknown" && areaRatio >= 0.98;
 
-                    bool shouldUseRegion;
-                    if (regionSource == "child-enum" &&
-                        (regionSnap.RegionKind == RegionKind.Editor || regionSnap.RegionKind == RegionKind.MainContent))
-                    {
-                        double threshold = _currentSnapResult.Kind == SnapKind.Region ? 0.995 : 0.99;
-                        shouldUseRegion = areaRatio <= threshold;
-                    }
-                    else
-                    {
-                        shouldUseRegion = ShouldUseRegionByAreaRatio(areaRatio);
-                    }
-
-                    if (!isFastPointerMotion && shouldUseRegion)
-                    {
-                        snapResult = regionSnap;
-                        regionSelected = true;
-                        RememberStableRegion(regionSnap, now);
-
-                        if ((now - _lastRegionSelectLogAt).TotalMilliseconds >= 250)
+                        if (!suppressUnknownNearFull && (now - _lastRegionCandidateLogAt).TotalMilliseconds >= 250)
                         {
-                            _lastRegionSelectLogAt = now;
+                            _lastRegionCandidateLogAt = now;
                             LogService.LogInfo(
-                                "snap.region.selected",
-                                $"profile={profileLabel} reason=area_ratio_pass kind={regionSnap.RegionKind} source={regionSource} bounds=({regionSnap.Bounds?.Left:F1},{regionSnap.Bounds?.Top:F1},{regionSnap.Bounds?.Width:F1},{regionSnap.Bounds?.Height:F1}) areaRatio={areaRatio:F3}",
-                                stage: "region.select");
+                                "snap.region.candidate",
+                                $"profile={profileLabel} reason=candidate_observed kind={regionSnap.RegionKind} source={regionSource} bounds=({regionSnap.Bounds?.Left:F1},{regionSnap.Bounds?.Top:F1},{regionSnap.Bounds?.Width:F1},{regionSnap.Bounds?.Height:F1}) areaRatio={areaRatio:F3} fast={isFastPointerMotion}",
+                                stage: "region.candidate");
                         }
-                    }
-                    else
-                    {
-                        rejectReason = isFastPointerMotion ? "fast_pointer_skip" : "area_ratio_fail";
+
+                        bool shouldUseRegion;
+                        if (regionSource == "child-enum" &&
+                            (regionSnap.RegionKind == RegionKind.Editor || regionSnap.RegionKind == RegionKind.MainContent))
+                        {
+                            double threshold = _currentSnapResult.Kind == SnapKind.Region ? 0.995 : 0.99;
+                            shouldUseRegion = areaRatio <= threshold;
+                        }
+                        else
+                        {
+                            shouldUseRegion = ShouldUseRegionByAreaRatio(areaRatio);
+                        }
+
+                        if (!isFastPointerMotion && shouldUseRegion)
+                        {
+                            snapResult = regionSnap;
+                            regionSelected = true;
+                            RememberStableRegion(regionSnap, now);
+
+                            if ((now - _lastRegionSelectLogAt).TotalMilliseconds >= 250)
+                            {
+                                _lastRegionSelectLogAt = now;
+                                LogService.LogInfo(
+                                    "snap.region.selected",
+                                    $"profile={profileLabel} reason=area_ratio_pass kind={regionSnap.RegionKind} source={regionSource} bounds=({regionSnap.Bounds?.Left:F1},{regionSnap.Bounds?.Top:F1},{regionSnap.Bounds?.Width:F1},{regionSnap.Bounds?.Height:F1}) areaRatio={areaRatio:F3}",
+                                    stage: "region.select");
+                            }
+                        }
+                        else
+                        {
+                            rejectReason = "area_ratio_fail";
+                        }
                     }
                 }
             }
