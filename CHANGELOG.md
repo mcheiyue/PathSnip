@@ -5,7 +5,7 @@ All notable changes to this project will be documented in this file.
 ## [v1.1.8] - 2026-03-15
 
 > **[SYS_MSG]** 聚焦快动场景的吸附/探测节流与稳定性修正，补齐构建清单与文档入口，确保截图流程更稳定。
-> **[METRICS]** Binary: 567.5 KB (581120 bytes) | Startup: 待确认
+> **[METRICS]** Binary: <1MB
 
 ### 💻 终端与工作流
 * **[Build]** 显式列出 WPF 页面与源码文件。
