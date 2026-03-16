@@ -439,6 +439,7 @@ namespace PathSnip
             RectToolBtn.IsChecked = _currentTool == AnnotationTool.Rectangle;
             ArrowToolBtn.IsChecked = _currentTool == AnnotationTool.Arrow;
             TextToolBtn.IsChecked = _currentTool == AnnotationTool.Text;
+            HighlighterToolBtn.IsChecked = _currentTool == AnnotationTool.Highlighter;
             MosaicToolBtn.IsChecked = _currentTool == AnnotationTool.Mosaic;
             StepToolBtn.IsChecked = _currentTool == AnnotationTool.Step;
         }
