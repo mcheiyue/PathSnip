@@ -266,22 +266,36 @@
                        Fill="Transparent"
                        Visibility="Collapsed" />
             
-            <!-- 尺寸标注 -->
-            <Border x:Name="SizeLabel"
-                    Background="#CC000000"
-                    CornerRadius="2"
-                    Padding="6,2"
-                    Visibility="Collapsed">
-                <TextBlock x:Name="SizeText"
-                           Foreground="White"
-                           FontSize="12"
-                           FontFamily="Segoe UI" />
-            </Border>
-            
-            <!-- 选区调整锚点 - 8个 -->
-            <!-- 四角锚点 -->
-            <Thumb x:Name="ResizeTopLeft" Width="10" Height="10" Cursor="SizeNWSE" 
-                   Background="White" BorderBrush="#0078D4" BorderThickness="1"
+             <!-- 尺寸标注 -->
+             <Border x:Name="SizeLabel"
+                     Background="#CC000000"
+                     CornerRadius="2"
+                     Padding="6,2"
+                     Visibility="Collapsed">
+                 <TextBlock x:Name="SizeText"
+                            Foreground="White"
+                            FontSize="12"
+                            FontFamily="Segoe UI" />
+             </Border>
+            <Thumb x:Name="MoveSelectionThumb"
+                   Background="Transparent"
+                   Cursor="SizeAll"
+                   Visibility="Collapsed"
+                   IsHitTestVisible="False"
+                   DragStarted="MoveSelectionThumb_DragStarted"
+                   DragDelta="MoveSelectionThumb_DragDelta"
+                   DragCompleted="MoveSelectionThumb_DragCompleted">
+                <Thumb.Template>
+                    <ControlTemplate TargetType="{x:Type Thumb}">
+                        <Border Background="{TemplateBinding Background}" />
+                    </ControlTemplate>
+                </Thumb.Template>
+            </Thumb>
+             
+             <!-- 选区调整锚点 - 8个 -->
+             <!-- 四角锚点 -->
+             <Thumb x:Name="ResizeTopLeft" Width="10" Height="10" Cursor="SizeNWSE" 
+                    Background="White" BorderBrush="#0078D4" BorderThickness="1"
                    Visibility="Collapsed" DragDelta="ResizeThumb_DragDelta" 
                    DragStarted="ResizeThumb_DragStarted"
                    DragCompleted="ResizeThumb_DragCompleted"

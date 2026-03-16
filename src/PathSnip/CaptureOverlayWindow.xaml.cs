@@ -75,6 +75,10 @@ namespace PathSnip
         private double _mouseOffsetX;
         private double _mouseOffsetY;
 
+        private bool _isMoveSelectionDragging;
+        private bool _hasShownMoveSelectionTip;
+        private DispatcherTimer _moveSelectionTipHideTimer;
+
         private bool _isDrawing;
         private bool _selectionCompleted;
         private readonly SelectionSession _selectionSession = new SelectionSession();
@@ -255,6 +259,7 @@ namespace PathSnip
                 StopElementSnapUpgrade();
                 _copyFeedbackTimer?.Stop();
                 _cycleShortcutTimer?.Stop();
+                _moveSelectionTipHideTimer?.Stop();
             };
 
             // 标注画布事件
@@ -305,6 +310,7 @@ namespace PathSnip
 
                 _currentTool = AnnotationTool.None;
                 UpdateToolbarSelection();
+                UpdateMoveSelectionThumbState();
                 return;
             }
 
@@ -352,6 +358,7 @@ namespace PathSnip
             SelectionRect.Visibility = Visibility.Collapsed;
             OuterMask.Visibility = Visibility.Collapsed;
             SizeLabel.Visibility = Visibility.Collapsed;
+            HideMoveSelectionThumb();
 
             // 隐藏调整锚点
             HideResizeAnchors();
@@ -399,6 +406,7 @@ namespace PathSnip
             SelectionRect.Visibility = Visibility.Collapsed;
             OuterMask.Visibility = Visibility.Collapsed;
             SizeLabel.Visibility = Visibility.Collapsed;
+            HideMoveSelectionThumb();
             HideResizeAnchors();
 
             // 显示提示文字
@@ -1107,6 +1115,8 @@ namespace PathSnip
             // 显示选区调整锚点
             ShowResizeAnchors();
 
+            UpdateMoveSelectionThumbState();
+
             // 初始化全局工具上下文（只初始化一次，后续只更新样式）
             if (_toolContext == null)
             {
@@ -1150,6 +1160,11 @@ namespace PathSnip
             SizeText.Text = $"{(int)rect.Width} × {(int)rect.Height}";
             Canvas.SetLeft(SizeLabel, rect.Left);
             Canvas.SetTop(SizeLabel, rect.Top - 25);
+
+            Canvas.SetLeft(MoveSelectionThumb, rect.Left);
+            Canvas.SetTop(MoveSelectionThumb, rect.Top);
+            MoveSelectionThumb.Width = rect.Width;
+            MoveSelectionThumb.Height = rect.Height;
         }
 
         private void UpdateOuterMask(Rect selectionRect)
@@ -1384,6 +1399,8 @@ namespace PathSnip
                         PropertyPopup.IsOpen = false;
                         break;
                 }
+
+                UpdateMoveSelectionThumbState();
             }
         }
         /// <summary>
@@ -1589,6 +1606,8 @@ namespace PathSnip
                 _currentTool = AnnotationTool.None;
                 _currentAnnotationTool?.OnDeselected();
                 _currentAnnotationTool = null;
+
+                UpdateMoveSelectionThumbState();
 
                 // 【核心修改】不要在这里写 PropertyPopup.IsOpen = false; 或任何折叠代码！
             }
@@ -2113,6 +2132,7 @@ namespace PathSnip
             PropertyPopup.IsOpen = false;
             AnnotationCanvas.Visibility = Visibility.Collapsed;
             MosaicCanvas.Visibility = Visibility.Collapsed;
+            HideMoveSelectionThumb();
             HideResizeAnchors();
             UpdateIdleHintText();
             HintText.Visibility = Visibility.Visible;
@@ -2720,6 +2740,145 @@ namespace PathSnip
             ThicknessThin.IsChecked = thickness == AnnotationThickness.Thin;
             ThicknessMedium.IsChecked = thickness == AnnotationThickness.Medium;
             ThicknessThick.IsChecked = thickness == AnnotationThickness.Thick;
+        }
+
+        #endregion
+
+        #region 选区平移拖动
+
+        private bool CanMoveSelection()
+        {
+            if (!_selectionCompleted) return false;
+            if (_currentTool != AnnotationTool.None) return false;
+            if (_isDrawing) return false;
+            if (_currentRect.IsEmpty) return false;
+            if (_currentRect.Width <= 0 || _currentRect.Height <= 0) return false;
+            return true;
+        }
+
+        private void UpdateMoveSelectionThumbState()
+        {
+            bool enabled = CanMoveSelection();
+            MoveSelectionThumb.Visibility = enabled ? Visibility.Visible : Visibility.Collapsed;
+            MoveSelectionThumb.IsHitTestVisible = enabled;
+        }
+
+        private void HideMoveSelectionThumb()
+        {
+            _isMoveSelectionDragging = false;
+            MoveSelectionThumb.IsHitTestVisible = false;
+            MoveSelectionThumb.Visibility = Visibility.Collapsed;
+            _moveSelectionTipHideTimer?.Stop();
+        }
+
+        private static double Clamp(double value, double min, double max)
+        {
+            if (value < min) return min;
+            if (value > max) return max;
+            return value;
+        }
+
+        private Rect ClampMoveRect(Rect rect)
+        {
+            double boundsWidth = Width;
+            double boundsHeight = Height;
+            if (boundsWidth <= 0) boundsWidth = ActualWidth;
+            if (boundsHeight <= 0) boundsHeight = ActualHeight;
+
+            double maxLeft = Math.Max(0, boundsWidth - rect.Width);
+            double maxTop = Math.Max(0, boundsHeight - rect.Height);
+
+            double left = Clamp(rect.Left, 0, maxLeft);
+            double top = Clamp(rect.Top, 0, maxTop);
+            return new Rect(left, top, rect.Width, rect.Height);
+        }
+
+        private void ShowMoveSelectionTipOnce()
+        {
+            if (_hasShownMoveSelectionTip) return;
+
+            _hasShownMoveSelectionTip = true;
+
+            HintText.Text = "移动选区只改变裁剪区域，不会移动已画标注/马赛克内容";
+            HintText.Visibility = Visibility.Visible;
+
+            if (_moveSelectionTipHideTimer == null)
+            {
+                _moveSelectionTipHideTimer = new DispatcherTimer
+                {
+                    Interval = TimeSpan.FromMilliseconds(2000)
+                };
+                _moveSelectionTipHideTimer.Tick += (s, e) =>
+                {
+                    _moveSelectionTipHideTimer.Stop();
+
+                    if (_selectionCompleted)
+                    {
+                        HintText.Visibility = Visibility.Collapsed;
+                        return;
+                    }
+
+                    UpdateIdleHintText();
+                    HintText.Visibility = Visibility.Visible;
+                };
+            }
+
+            _moveSelectionTipHideTimer.Stop();
+            _moveSelectionTipHideTimer.Start();
+        }
+
+        private void MoveSelectionThumb_DragStarted(object sender, DragStartedEventArgs e)
+        {
+            if (!CanMoveSelection())
+            {
+                _isMoveSelectionDragging = false;
+                return;
+            }
+
+            _isMoveSelectionDragging = true;
+            Toolbar.Visibility = Visibility.Collapsed;
+            PropertyPopup.IsOpen = false;
+
+            ShowMoveSelectionTipOnce();
+            e.Handled = true;
+        }
+
+        private void MoveSelectionThumb_DragDelta(object sender, DragDeltaEventArgs e)
+        {
+            if (!_isMoveSelectionDragging) return;
+            if (!CanMoveSelection()) return;
+
+            Toolbar.Visibility = Visibility.Collapsed;
+            PropertyPopup.IsOpen = false;
+
+            var moved = new Rect(
+                _currentRect.Left + e.HorizontalChange,
+                _currentRect.Top + e.VerticalChange,
+                _currentRect.Width,
+                _currentRect.Height);
+
+            moved = ClampMoveRect(moved);
+            _currentRect = moved;
+
+            UpdateSelection(_currentRect.TopLeft, _currentRect.BottomRight);
+            UpdateResizeAnchors();
+            AnnotationCanvas.Clip = new RectangleGeometry(_currentRect);
+            MosaicCanvas.Clip = new RectangleGeometry(_currentRect);
+
+            e.Handled = true;
+        }
+
+        private void MoveSelectionThumb_DragCompleted(object sender, DragCompletedEventArgs e)
+        {
+            _isMoveSelectionDragging = false;
+
+            if (e.Canceled) return;
+            if (!_selectionCompleted) return;
+            if (_currentRect.IsEmpty) return;
+            if (_currentRect.Width <= 0 || _currentRect.Height <= 0) return;
+
+            ShowToolbar();
+            e.Handled = true;
         }
 
         #endregion
