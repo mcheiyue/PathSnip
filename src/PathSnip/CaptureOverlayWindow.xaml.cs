@@ -184,6 +184,12 @@ namespace PathSnip
         private string _currentColorHex = "";
         private bool _isShowingCopyFeedback = false;
         private DispatcherTimer _copyFeedbackTimer;
+
+        private const int CycleShortcutThrottleMs = 60;
+        private DispatcherTimer _cycleShortcutTimer;
+        private int _pendingCycleShortcutDelta;
+        private int _isCycleShortcutDrainRunning;
+        private int _isNonCycleShortcutRunning;
         private static readonly Stopwatch _stopwatch = Stopwatch.StartNew();
         private long _lastMagnifierUpdateTime;
         private Point _lastMagnifierPosition;
@@ -248,6 +254,7 @@ namespace PathSnip
             {
                 StopElementSnapUpgrade();
                 _copyFeedbackTimer?.Stop();
+                _cycleShortcutTimer?.Stop();
             };
 
             // 标注画布事件
@@ -1719,20 +1726,44 @@ namespace PathSnip
                     return true;
 
                 case OverlayShortcutAction.Pin:
-                    PinBtn_Click(this, new RoutedEventArgs());
-                    return true;
+                    if (Interlocked.CompareExchange(ref _isNonCycleShortcutRunning, 1, 0) != 0)
+                    {
+                        return true;
+                    }
+
+                    try
+                    {
+                        PinBtn_Click(this, new RoutedEventArgs());
+                        return true;
+                    }
+                    finally
+                    {
+                        Interlocked.Exchange(ref _isNonCycleShortcutRunning, 0);
+                    }
 
                 case OverlayShortcutAction.CopyColor:
-                    await CopyCurrentColorAsync();
-                    return true;
+                    if (Interlocked.CompareExchange(ref _isNonCycleShortcutRunning, 1, 0) != 0)
+                    {
+                        return true;
+                    }
+
+                    try
+                    {
+                        await CopyCurrentColorAsync();
+                        return true;
+                    }
+                    finally
+                    {
+                        Interlocked.Exchange(ref _isNonCycleShortcutRunning, 0);
+                    }
 
                 case OverlayShortcutAction.CycleNext:
-                    LogService.LogInfo("snap.cycle.tab", "cycle next requested", stage: "shortcut");
-                    return await CycleSnapTargetAsync(true);
+                    EnqueueCycleShortcutDelta(1);
+                    return true;
 
                 case OverlayShortcutAction.CyclePrevious:
-                    LogService.LogInfo("snap.cycle.shift_tab", "cycle previous requested", stage: "shortcut");
-                    return await CycleSnapTargetAsync(false);
+                    EnqueueCycleShortcutDelta(-1);
+                    return true;
 
                 case OverlayShortcutAction.BypassOn:
                     if (!_isSnapBypassedByAlt)
@@ -1757,6 +1788,81 @@ namespace PathSnip
 
                 default:
                     return false;
+            }
+        }
+
+        private void EnqueueCycleShortcutDelta(int delta)
+        {
+            if (!CanHandleCycleShortcut())
+            {
+                return;
+            }
+
+            Interlocked.Add(ref _pendingCycleShortcutDelta, delta);
+
+            if (_cycleShortcutTimer == null)
+            {
+                _cycleShortcutTimer = new DispatcherTimer
+                {
+                    Interval = TimeSpan.FromMilliseconds(CycleShortcutThrottleMs)
+                };
+                _cycleShortcutTimer.Tick += CycleShortcutTimer_Tick;
+            }
+
+            if (!_cycleShortcutTimer.IsEnabled)
+            {
+                _cycleShortcutTimer.Start();
+            }
+        }
+
+        private async void CycleShortcutTimer_Tick(object sender, EventArgs e)
+        {
+            _cycleShortcutTimer.Stop();
+
+            if (Interlocked.CompareExchange(ref _isCycleShortcutDrainRunning, 1, 0) != 0)
+            {
+                _cycleShortcutTimer.Start();
+                return;
+            }
+
+            try
+            {
+                int delta = Interlocked.Exchange(ref _pendingCycleShortcutDelta, 0);
+                if (delta == 0)
+                {
+                    return;
+                }
+
+                int step = delta > 0 ? 1 : -1;
+                int remaining = delta - step;
+                if (remaining != 0)
+                {
+                    Interlocked.Add(ref _pendingCycleShortcutDelta, remaining);
+                }
+
+                bool cycled = await CycleSnapTargetAsync(step > 0);
+                if (cycled)
+                {
+                    int pending = Volatile.Read(ref _pendingCycleShortcutDelta);
+                    LogService.LogInfo(
+                        step > 0 ? "snap.cycle.tab" : "snap.cycle.shift_tab",
+                        $"delta={step} pending={pending}",
+                        stage: "shortcut");
+                }
+                else
+                {
+                    // 当前状态无法 cycle（例如 snap 被绕过/已完成），清空剩余请求，避免空转。
+                    Interlocked.Exchange(ref _pendingCycleShortcutDelta, 0);
+                }
+            }
+            finally
+            {
+                Interlocked.Exchange(ref _isCycleShortcutDrainRunning, 0);
+
+                if (Volatile.Read(ref _pendingCycleShortcutDelta) != 0)
+                {
+                    _cycleShortcutTimer.Start();
+                }
             }
         }
 
