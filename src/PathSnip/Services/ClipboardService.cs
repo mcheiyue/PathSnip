@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Concurrent;
+using System.Diagnostics;
 using System.IO;
 using System.Threading;
 using System.Threading.Tasks;
@@ -35,6 +36,13 @@ namespace PathSnip.Services
         private static readonly int[] SlowCantOpenRetryDelaysMs = { 1000, 2000, 5000 };
         private const int ClipboardQueueCapacity = 512;
 
+        private static readonly object SetTextCoalesceLock = new object();
+        private static string _pendingText;
+        private static string _pendingTextOperationId;
+        private static int _pendingTextCoalescedCount;
+        private static long _pendingTextVersion;
+        private static TaskCompletionSource<bool> _pendingTextCompletion;
+
         private static readonly BlockingCollection<ClipboardWorkItem> ClipboardQueue =
             new BlockingCollection<ClipboardWorkItem>(new ConcurrentQueue<ClipboardWorkItem>(), ClipboardQueueCapacity);
 
@@ -56,7 +64,8 @@ namespace PathSnip.Services
             {
                 operationId = LogService.CreateOperationId("clip");
             }
-            return RunStaClipboardActionAsync(() => SetText(text, operationId), operationId, "text");
+
+            return TrySetTextCoalescedAsync(text, operationId);
         }
 
         public static Task<bool> TrySetImageAsync(BitmapSource bitmap, string operationId = null)
@@ -168,21 +177,193 @@ namespace PathSnip.Services
         {
             var tcs = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
 
+            EnqueueClipboardWorkItem(new ClipboardWorkItem(action, tcs, operationId, actionName));
+
+            return tcs.Task;
+        }
+
+        private static Task<bool> TrySetTextCoalescedAsync(string text, string operationId)
+        {
+            TaskCompletionSource<bool> completion;
+            bool shouldEnqueue = false;
+
+            lock (SetTextCoalesceLock)
+            {
+                _pendingText = text;
+                _pendingTextOperationId = operationId;
+                _pendingTextVersion++;
+
+                if (_pendingTextCompletion == null || _pendingTextCompletion.Task.IsCompleted)
+                {
+                    _pendingTextCoalescedCount = 0;
+                    _pendingTextCompletion = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
+                    shouldEnqueue = true;
+                }
+                else
+                {
+                    _pendingTextCoalescedCount++;
+                }
+
+                completion = _pendingTextCompletion;
+            }
+
+            if (shouldEnqueue)
+            {
+                EnqueueClipboardWorkItem(new ClipboardWorkItem(
+                    () => DrainPendingTextWrites(completion),
+                    completion,
+                    operationId,
+                    "text"));
+            }
+
+            return completion.Task;
+        }
+
+        private static void DrainPendingTextWrites(TaskCompletionSource<bool> completion)
+        {
+            bool lastResult = false;
+            bool wasBusy = false;
+            long handledVersion = 0;
+
+            while (true)
+            {
+                string text;
+                string operationId;
+                int coalesced;
+                long version;
+
+                lock (SetTextCoalesceLock)
+                {
+                    if (!ReferenceEquals(_pendingTextCompletion, completion))
+                    {
+                        completion.TrySetResult(false);
+                        return;
+                    }
+
+                    text = _pendingText;
+                    operationId = _pendingTextOperationId;
+                    coalesced = _pendingTextCoalescedCount;
+                    _pendingTextCoalescedCount = 0;
+                    version = _pendingTextVersion;
+                }
+
+                if (coalesced > 0)
+                {
+                    LogService.LogInfo(
+                        "clipboard.set_text.coalesced",
+                        $"count={coalesced} textLength={text?.Length ?? 0}",
+                        operationId,
+                        "clipboard.coalesce");
+                }
+
+                lastResult = TryWriteTextWithCircuit(text, operationId, ref wasBusy);
+                handledVersion = version;
+
+                lock (SetTextCoalesceLock)
+                {
+                    if (!ReferenceEquals(_pendingTextCompletion, completion))
+                    {
+                        completion.TrySetResult(false);
+                        return;
+                    }
+
+                    if (_pendingTextVersion == handledVersion)
+                    {
+                        _pendingText = null;
+                        _pendingTextOperationId = null;
+                        _pendingTextCompletion = null;
+                        completion.TrySetResult(lastResult);
+                        return;
+                    }
+                }
+            }
+        }
+
+        private static bool TryWriteTextWithCircuit(string text, string operationId, ref bool wasBusy)
+        {
+            const int maxTotalMs = 8000;
+            var watch = Stopwatch.StartNew();
+
+            int attempt = 0;
+            while (watch.ElapsedMilliseconds < maxTotalMs)
+            {
+                try
+                {
+                    WriteTextWithWinFormsRetry(text);
+                    LogService.LogInfo("clipboard.set_text.success", $"textLength={text?.Length ?? 0}", operationId, "clipboard.write");
+
+                    if (wasBusy)
+                    {
+                        LogService.LogInfo("clipboard.set_text.circuit_recovered", "clipboard recovered", operationId, "clipboard.circuit");
+                        wasBusy = false;
+                    }
+
+                    return true;
+                }
+                catch (Exception ex)
+                {
+                    if (!IsClipboardCantOpen(ex))
+                    {
+                        LogService.LogException("clipboard.set_text.failed", ex, $"attempt={attempt + 1}", operationId, "clipboard.write");
+                        return false;
+                    }
+
+                    wasBusy = true;
+                    int delayMs = ResolveCantOpenCooldownMs(attempt);
+                    LogService.LogWarn(
+                        "clipboard.set_text.circuit_open",
+                        $"attempt={attempt + 1} delayMs={delayMs} hresult=0x{((uint)ex.HResult):X8} textLength={text?.Length ?? 0} queue={ClipboardQueue.Count}",
+                        operationId,
+                        "clipboard.circuit");
+
+                    Thread.Sleep(delayMs);
+                    attempt++;
+                }
+            }
+
+            LogService.LogWarn("clipboard.set_text.failed", $"timeoutMs={maxTotalMs} textLength={text?.Length ?? 0}", operationId, "clipboard.write");
+            return false;
+        }
+
+        private static int ResolveCantOpenCooldownMs(int attempt)
+        {
+            if (attempt <= 0) return 120;
+            if (attempt == 1) return 250;
+            if (attempt == 2) return 500;
+            if (attempt == 3) return 1000;
+            if (attempt == 4) return 1500;
+            return 2000;
+        }
+
+        private static void EnqueueClipboardWorkItem(ClipboardWorkItem workItem)
+        {
             try
             {
-                if (!ClipboardQueue.TryAdd(new ClipboardWorkItem(action, tcs, operationId, actionName)))
+                if (!ClipboardQueue.TryAdd(workItem))
                 {
-                    LogService.LogWarn("clipboard.queue.full", $"剪贴板队列已满 action={actionName}", operationId, "queue.add");
-                    tcs.TrySetResult(false);
+                    LogService.LogWarn("clipboard.queue.full", $"剪贴板队列已满 action={workItem.ActionName}", workItem.OperationId, "queue.add");
+                    workItem.Completion.TrySetResult(false);
+
+                    if (workItem.ActionName == "text")
+                    {
+                        lock (SetTextCoalesceLock)
+                        {
+                            if (ReferenceEquals(_pendingTextCompletion, workItem.Completion))
+                            {
+                                _pendingText = null;
+                                _pendingTextOperationId = null;
+                                _pendingTextCompletion = null;
+                                _pendingTextCoalescedCount = 0;
+                            }
+                        }
+                    }
                 }
             }
             catch (Exception ex)
             {
-                LogService.LogException("clipboard.queue.enqueue_failed", ex, $"入队失败 action={actionName}", operationId, "queue.add");
-                tcs.TrySetResult(false);
+                LogService.LogException("clipboard.queue.enqueue_failed", ex, $"入队失败 action={workItem.ActionName}", workItem.OperationId, "queue.add");
+                workItem.Completion.TrySetResult(false);
             }
-
-            return tcs.Task;
         }
 
         private static void ProcessClipboardQueue()
