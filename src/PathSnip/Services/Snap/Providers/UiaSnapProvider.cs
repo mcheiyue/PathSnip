@@ -9,6 +9,7 @@ namespace PathSnip.Services.Snap
 {
     public sealed class UiaSnapProvider
     {
+        private static int _inFlight;
         private const int DwmaExtendedFrameBounds = 9;
         private const double MinElementSize = 6;
         private const double WindowBoundsTolerance = 2;
@@ -28,7 +29,31 @@ namespace PathSnip.Services.Snap
                 return Task.FromResult(SnapResult.None);
             }
 
-            return Task.Run(() => ResolveElementSnap(screenPoint, currentProcessId, currentSnap, cancellationToken), cancellationToken);
+            if (cancellationToken.IsCancellationRequested)
+            {
+                return Task.FromResult(SnapResult.None);
+            }
+
+            if (Interlocked.CompareExchange(ref _inFlight, 1, 0) != 0)
+            {
+                return Task.FromResult(SnapResult.None);
+            }
+
+            return Task.Run(() =>
+            {
+                try
+                {
+                    return ResolveElementSnap(screenPoint, currentProcessId, currentSnap, cancellationToken);
+                }
+                catch (OperationCanceledException)
+                {
+                    return SnapResult.None;
+                }
+                finally
+                {
+                    Interlocked.Exchange(ref _inFlight, 0);
+                }
+            });
         }
 
         private static SnapResult ResolveElementSnap(Point screenPoint, int currentProcessId, SnapResult currentSnap, CancellationToken cancellationToken)

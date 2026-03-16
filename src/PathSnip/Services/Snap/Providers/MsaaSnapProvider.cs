@@ -9,6 +9,7 @@ namespace PathSnip.Services.Snap
 {
     public sealed class MsaaSnapProvider
     {
+        private static int _inFlight;
         private static readonly Guid IAccessibleGuid = new Guid("618736E0-3C3D-11CF-810C-00AA00389B71");
         private const int DwmaExtendedFrameBounds = 9;
         private const uint ObjIdWindow = 0x00000000;
@@ -31,7 +32,31 @@ namespace PathSnip.Services.Snap
                 return Task.FromResult(SnapResult.None);
             }
 
-            return Task.Run(() => ResolveElementSnap(screenPoint, currentProcessId, currentSnap, cancellationToken), cancellationToken);
+            if (cancellationToken.IsCancellationRequested)
+            {
+                return Task.FromResult(SnapResult.None);
+            }
+
+            if (Interlocked.CompareExchange(ref _inFlight, 1, 0) != 0)
+            {
+                return Task.FromResult(SnapResult.None);
+            }
+
+            return Task.Run(() =>
+            {
+                try
+                {
+                    return ResolveElementSnap(screenPoint, currentProcessId, currentSnap, cancellationToken);
+                }
+                catch (OperationCanceledException)
+                {
+                    return SnapResult.None;
+                }
+                finally
+                {
+                    Interlocked.Exchange(ref _inFlight, 0);
+                }
+            });
         }
 
         private static SnapResult ResolveElementSnap(Point screenPoint, int currentProcessId, SnapResult currentSnap, CancellationToken cancellationToken)
