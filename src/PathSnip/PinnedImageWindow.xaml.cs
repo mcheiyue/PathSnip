@@ -20,6 +20,8 @@ namespace PathSnip
         private const double OpacityStep = 0.1;
         private const double ScaleStep = 0.1;
 
+        private System.Windows.Threading.DispatcherTimer _opacityHintHideTimer;
+
         public PinnedImageWindow()
         {
             InitializeComponent();
@@ -88,17 +90,8 @@ namespace PathSnip
                 Opacity = _currentOpacity;
                 OpacityHint.Text = $"透明度: {(_currentOpacity * 100):F0}%";
                 OpacityHint.Visibility = Visibility.Visible;
-                
-                var timer = new System.Windows.Threading.DispatcherTimer
-                {
-                    Interval = TimeSpan.FromSeconds(2)
-                };
-                timer.Tick += (s, args) =>
-                {
-                    OpacityHint.Visibility = Visibility.Collapsed;
-                    timer.Stop();
-                };
-                timer.Start();
+
+                ResetOpacityHintHideTimer();
             }
             else
             {
@@ -120,17 +113,41 @@ namespace PathSnip
             // 右键显示提示
             OpacityHint.Text = "右键/双击关闭贴图";
             OpacityHint.Visibility = Visibility.Visible;
-            
-            var timer = new System.Windows.Threading.DispatcherTimer
+
+            ResetOpacityHintHideTimer();
+        }
+
+        private void ResetOpacityHintHideTimer()
+        {
+            if (_opacityHintHideTimer == null)
             {
-                Interval = TimeSpan.FromSeconds(2)
-            };
-            timer.Tick += (s, args) =>
+                _opacityHintHideTimer = new System.Windows.Threading.DispatcherTimer
+                {
+                    Interval = TimeSpan.FromSeconds(2)
+                };
+                _opacityHintHideTimer.Tick += OpacityHintHideTimer_Tick;
+            }
+
+            _opacityHintHideTimer.Stop();
+            _opacityHintHideTimer.Start();
+        }
+
+        private void OpacityHintHideTimer_Tick(object sender, EventArgs e)
+        {
+            _opacityHintHideTimer.Stop();
+            OpacityHint.Visibility = Visibility.Collapsed;
+        }
+
+        protected override void OnClosed(EventArgs e)
+        {
+            if (_opacityHintHideTimer != null)
             {
-                OpacityHint.Visibility = Visibility.Collapsed;
-                timer.Stop();
-            };
-            timer.Start();
+                _opacityHintHideTimer.Stop();
+                _opacityHintHideTimer.Tick -= OpacityHintHideTimer_Tick;
+                _opacityHintHideTimer = null;
+            }
+
+            base.OnClosed(e);
         }
 
         private void Window_MouseDoubleClick(object sender, MouseButtonEventArgs e)
