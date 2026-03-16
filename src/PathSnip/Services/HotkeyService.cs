@@ -13,6 +13,7 @@ namespace PathSnip.Services
         private HwndSource _source;
         private int _hotkeyId = 9000;
         private bool _isRegistered;
+        private bool _isHookAdded;
 
         private static string FormatHotkey(ModifierKeys modifiers, Key key)
         {
@@ -29,10 +30,23 @@ namespace PathSnip.Services
         public bool Register(ModifierKeys modifiers, Key key, Action callback)
         {
             var helper = new WindowInteropHelper(Application.Current.MainWindow);
-            _windowHandle = helper.EnsureHandle();
+            var newWindowHandle = helper.EnsureHandle();
+            var newSource = HwndSource.FromHwnd(newWindowHandle);
 
-            _source = HwndSource.FromHwnd(_windowHandle);
-            _source?.AddHook(HwndHook);
+            if (_isHookAdded && _source != null && !ReferenceEquals(_source, newSource))
+            {
+                _source.RemoveHook(HwndHook);
+                _isHookAdded = false;
+            }
+
+            _windowHandle = newWindowHandle;
+            _source = newSource;
+
+            if (_source != null && !_isHookAdded)
+            {
+                _source.AddHook(HwndHook);
+                _isHookAdded = true;
+            }
 
             // 将 ModifierKeys 和 Key 转换为系统参数
             uint fsModifiers = 0;
@@ -86,7 +100,15 @@ namespace PathSnip.Services
         public void Dispose()
         {
             Unregister();
-            _source?.RemoveHook(HwndHook);
+            if (_isHookAdded && _source != null)
+            {
+                _source.RemoveHook(HwndHook);
+                _isHookAdded = false;
+            }
+
+            _callback = null;
+            _source = null;
+            _windowHandle = IntPtr.Zero;
         }
     }
 }

@@ -133,7 +133,11 @@ namespace PathSnip
 
         protected override void OnExit(ExitEventArgs e)
         {
-            _hotkeyService?.Unregister();
+            if (_hotkeyService != null)
+            {
+                _hotkeyService.Dispose();
+                _hotkeyService = null;
+            }
             LogService.LogInfo("app.exit", "PathSnip 已退出", stage: "shutdown");
             base.OnExit(e);
         }
