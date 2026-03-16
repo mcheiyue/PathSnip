@@ -183,6 +183,7 @@ namespace PathSnip
         // 放大镜相关变量
         private string _currentColorHex = "";
         private bool _isShowingCopyFeedback = false;
+        private DispatcherTimer _copyFeedbackTimer;
         private static readonly Stopwatch _stopwatch = Stopwatch.StartNew();
         private long _lastMagnifierUpdateTime;
         private Point _lastMagnifierPosition;
@@ -243,7 +244,11 @@ namespace PathSnip
             };
             _elementSnapHoverTimer.Tick += ElementSnapHoverTimer_Tick;
 
-            Closed += (s, e) => StopElementSnapUpgrade();
+            Closed += (s, e) =>
+            {
+                StopElementSnapUpgrade();
+                _copyFeedbackTimer?.Stop();
+            };
 
             // 标注画布事件
             AnnotationCanvas.MouseLeftButtonDown += AnnotationCanvas_MouseLeftButtonDown;
@@ -1967,19 +1972,22 @@ namespace PathSnip
             _isShowingCopyFeedback = true;
             ColorHexText.Text = text;
 
-            var timer = new DispatcherTimer
+            if (_copyFeedbackTimer == null)
             {
-                Interval = TimeSpan.FromMilliseconds(800)
-            };
+                _copyFeedbackTimer = new DispatcherTimer
+                {
+                    Interval = TimeSpan.FromMilliseconds(800)
+                };
+                _copyFeedbackTimer.Tick += (s, args) =>
+                {
+                    _isShowingCopyFeedback = false;
+                    ColorHexText.Text = "#" + _currentColorHex;
+                    _copyFeedbackTimer.Stop();
+                };
+            }
 
-            timer.Tick += (s, args) =>
-            {
-                _isShowingCopyFeedback = false;
-                ColorHexText.Text = "#" + _currentColorHex;
-                timer.Stop();
-            };
-
-            timer.Start();
+            _copyFeedbackTimer.Stop();
+            _copyFeedbackTimer.Start();
         }
 
         private void CancelCapture()
