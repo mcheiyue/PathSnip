@@ -280,9 +280,9 @@ namespace PathSnip
 
             InputMethod.SetIsInputMethodEnabled(this, shouldEnableIme);
 
-            if (shouldEnableIme && focusedObject != null)
+            if (focusedObject != null)
             {
-                InputMethod.SetIsInputMethodEnabled(focusedObject, true);
+                InputMethod.SetIsInputMethodEnabled(focusedObject, shouldEnableIme);
             }
         }
 
@@ -1673,7 +1673,9 @@ namespace PathSnip
                 CanHandlePinShortcut(),
                 CanHandleColorCopyShortcut(),
                 CanHandleCycleShortcut(),
-                CanHandleBypassShortcut());
+                CanHandleBypassShortcut(),
+                CanHandleSaveShortcut(),
+                CanHandleUndoShortcut());
 
             if (await ExecuteShortcutActionAsync(action))
             {
@@ -1737,12 +1739,67 @@ namespace PathSnip
             return !_selectionCompleted && _holdAltToBypassSnap;
         }
 
+        private bool CanHandleSaveShortcut()
+        {
+            if (Toolbar.Visibility != Visibility.Visible || _currentRect.Width <= 0 || _currentRect.Height <= 0)
+            {
+                return false;
+            }
+
+            if (SaveBtn == null || !SaveBtn.IsEnabled)
+            {
+                return false;
+            }
+
+            return !(Keyboard.FocusedElement is TextBoxBase);
+        }
+
+        private bool CanHandleUndoShortcut()
+        {
+            if (Toolbar.Visibility != Visibility.Visible)
+            {
+                return false;
+            }
+
+            if (Keyboard.FocusedElement is TextBoxBase)
+            {
+                return false;
+            }
+
+            if (_toolContext == null)
+            {
+                return false;
+            }
+
+            return _toolContext.UndoStack.Count > 0;
+        }
+
         private async Task<bool> ExecuteShortcutActionAsync(OverlayShortcutAction action)
         {
             switch (action)
             {
                 case OverlayShortcutAction.Cancel:
                     CancelCapture();
+                    return true;
+
+                case OverlayShortcutAction.Save:
+                    if (Interlocked.CompareExchange(ref _isNonCycleShortcutRunning, 1, 0) != 0)
+                    {
+                        return true;
+                    }
+
+                    try
+                    {
+                        SaveBtn_Click(this, new RoutedEventArgs());
+                        return true;
+                    }
+                    finally
+                    {
+                        Interlocked.Exchange(ref _isNonCycleShortcutRunning, 0);
+                    }
+
+                case OverlayShortcutAction.Undo:
+                    UndoBtn_Click(this, new RoutedEventArgs());
                     return true;
 
                 case OverlayShortcutAction.Pin:

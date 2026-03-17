@@ -7,6 +7,8 @@ namespace PathSnip.Services.Overlay
     {
         None,
         Cancel,
+        Save,
+        Undo,
         Pin,
         CopyColor,
         CycleNext,
@@ -17,11 +19,21 @@ namespace PathSnip.Services.Overlay
 
     public sealed class OverlayShortcutHandler
     {
-        public OverlayShortcutAction ResolveKeyDown(Key key, Key imeProcessedKey, bool canPin, bool canCopyColor, bool canCycle, bool canBypass)
+        public OverlayShortcutAction ResolveKeyDown(Key key, Key imeProcessedKey, bool canPin, bool canCopyColor, bool canCycle, bool canBypass, bool canSave, bool canUndo)
         {
             if (key == Key.Escape)
             {
                 return OverlayShortcutAction.Cancel;
+            }
+
+            if (canSave && IsSaveKey(key, imeProcessedKey))
+            {
+                return OverlayShortcutAction.Save;
+            }
+
+            if (canUndo && IsUndoKey(key, imeProcessedKey))
+            {
+                return OverlayShortcutAction.Undo;
             }
 
             if (canBypass && IsBypassKey(key))
@@ -76,12 +88,51 @@ namespace PathSnip.Services.Overlay
 
         private static bool IsColorCopyKey(Key key, Key imeProcessedKey)
         {
-            return key == Key.C || (key == Key.ImeProcessed && imeProcessedKey == Key.C);
+            return key == Key.C || IsImeProcessedKey(key, imeProcessedKey, Key.C);
         }
 
         private static bool IsPinShortcutKey(Key key, Key imeProcessedKey)
         {
-            return key == Key.T || (key == Key.ImeProcessed && imeProcessedKey == Key.T);
+            return key == Key.T || IsImeProcessedKey(key, imeProcessedKey, Key.T);
+        }
+
+        private static bool IsSaveKey(Key key, Key imeProcessedKey)
+        {
+            if (Keyboard.Modifiers != ModifierKeys.None)
+            {
+                return false;
+            }
+
+            return key == Key.Return
+                || key == Key.Enter
+                || IsImeProcessedKey(key, imeProcessedKey, Key.Return)
+                || IsImeProcessedKey(key, imeProcessedKey, Key.Enter);
+        }
+
+        private static bool IsUndoKey(Key key, Key imeProcessedKey)
+        {
+            ModifierKeys modifiers = Keyboard.Modifiers;
+            if ((modifiers & ModifierKeys.Control) != ModifierKeys.Control)
+            {
+                return false;
+            }
+
+            if ((modifiers & ModifierKeys.Shift) == ModifierKeys.Shift)
+            {
+                return false;
+            }
+
+            if ((modifiers & (ModifierKeys.Alt | ModifierKeys.Windows)) != 0)
+            {
+                return false;
+            }
+
+            return key == Key.Z || IsImeProcessedKey(key, imeProcessedKey, Key.Z);
+        }
+
+        private static bool IsImeProcessedKey(Key key, Key imeProcessedKey, Key expected)
+        {
+            return key == Key.ImeProcessed && imeProcessedKey == expected;
         }
 
         private static bool IsBypassKey(Key key)
