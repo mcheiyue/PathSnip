@@ -568,6 +568,8 @@ namespace PathSnip
             var pathFormatMenu = FindMenuItemByTag(contextMenu, "PathFormat");
             if (pathFormatMenu != null)
             {
+                pathFormatMenu.IsEnabled = config.ClipboardMode == ClipboardMode.PathOnly;
+
                 var currentPathFormat = string.IsNullOrWhiteSpace(config.PathFormat) ? "Text" : config.PathFormat;
                 foreach (var item in pathFormatMenu.Items)
                 {
