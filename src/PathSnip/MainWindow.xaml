@@ -8,8 +8,32 @@
         ShowInTaskbar="False"
         Visibility="Hidden">
     <Window.Resources>
-        <ContextMenu x:Key="TrayMenu">
-            <MenuItem x:Name="CaptureMenuItem" Header="截图" Click="MenuItem_Capture_Click" />
+        <ContextMenu x:Key="TrayMenu" Opened="TrayMenu_Opened">
+            <MenuItem Header="截图" Tag="Capture" Click="MenuItem_Capture_Click" />
+
+            <MenuItem Header="最近一次" Tag="Recent">
+                <MenuItem Header="复制最近一次图片" Tag="RecentCopyImage" Click="MenuItem_RecentCopyImage_Click" />
+                <MenuItem Header="复制最近一次路径" Tag="RecentCopyPath" Click="MenuItem_RecentCopyPath_Click" />
+                <MenuItem Header="打开文件" Tag="RecentOpenFile" Click="MenuItem_RecentOpenFile_Click" />
+                <MenuItem Header="在资源管理器中定位" Tag="RecentLocate" Click="MenuItem_RecentLocate_Click" />
+            </MenuItem>
+
+            <Separator />
+
+            <MenuItem Header="剪贴板模式" Tag="ClipboardMode">
+                <MenuItem Header="仅路径" Tag="PathOnly" IsCheckable="True" Click="MenuItem_ClipboardMode_Click" />
+                <MenuItem Header="仅图片" Tag="ImageOnly" IsCheckable="True" Click="MenuItem_ClipboardMode_Click" />
+                <MenuItem Header="图片 + 路径" Tag="ImageAndPath" IsCheckable="True" Click="MenuItem_ClipboardMode_Click" />
+            </MenuItem>
+
+            <MenuItem Header="路径格式" Tag="PathFormat">
+                <MenuItem Header="纯文本 (D:\\path\\image.png)" Tag="Text" IsCheckable="True" Click="MenuItem_PathFormat_Click" />
+                <MenuItem Header="Markdown (![image](...))" Tag="Markdown" IsCheckable="True" Click="MenuItem_PathFormat_Click" />
+                <MenuItem Header="HTML (&lt;img src=&quot;...&quot;/&gt;)" Tag="HTML" IsCheckable="True" Click="MenuItem_PathFormat_Click" />
+            </MenuItem>
+
+            <Separator />
+
             <MenuItem Header="打开保存目录" Click="MenuItem_OpenFolder_Click" />
             <MenuItem Header="设置" Click="MenuItem_Settings_Click" />
             <Separator />

@@ -1,9 +1,11 @@
 using System;
 using System.Diagnostics;
+using System.IO;
 using System.Threading.Tasks;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Input;
+using System.Windows.Media.Imaging;
 using PathSnip.Services;
 
 namespace PathSnip
@@ -18,6 +20,7 @@ namespace PathSnip
         private HotkeyService _hotkeyService;
         private bool _isCapturing;
         private int _lastCaptureRequestTick = -1;
+        private string _lastSavedPath;
 
         public MainWindow()
         {
@@ -122,8 +125,11 @@ namespace PathSnip
         {
             var config = ConfigService.Instance;
             var contextMenu = (ContextMenu)Resources["TrayMenu"];
-            var captureItem = (MenuItem)contextMenu.Items[0];
-            captureItem.Header = $"截图 ({config.HotkeyModifiers}+{config.HotkeyKey})";
+            var captureItem = FindMenuItemByTag(contextMenu, "Capture");
+            if (captureItem != null)
+            {
+                captureItem.Header = $"截图 ({config.HotkeyModifiers}+{config.HotkeyKey})";
+            }
         }
 
         private ModifierKeys ParseModifiers(string modifiersStr)
@@ -187,8 +193,13 @@ namespace PathSnip
                 var filePath = FileService.Save(bitmap, operationId);
                 LogService.LogInfo("capture.file.saved", $"pathLength={filePath?.Length ?? 0}", operationId, "file.save");
 
+                if (!string.IsNullOrWhiteSpace(filePath))
+                {
+                    _lastSavedPath = filePath;
+                }
+
                 var config = ConfigService.Instance;
-                StartClipboardWriteAfterSave(bitmap, filePath, config.ClipboardMode, config.PathFormat, config.ShowNotification, operationId, isCompositeCapture: false);
+                StartClipboardWriteAfterSave(bitmap, filePath, config.ClipboardMode, config.PathFormat, config.MarkdownHtmlCopyMode, config.ShowNotification, operationId, isCompositeCapture: false);
 
                 stopwatch.Stop();
                 LogService.LogInfo("capture.region.completed", $"elapsedMs={stopwatch.ElapsedMilliseconds}", operationId, "capture.done");
@@ -226,8 +237,13 @@ namespace PathSnip
                 filePath = FileService.Save(bitmap, operationId);
                 LogService.LogInfo("capture.file.saved", $"pathLength={filePath?.Length ?? 0}", operationId, "file.save");
 
+                if (!string.IsNullOrWhiteSpace(filePath))
+                {
+                    _lastSavedPath = filePath;
+                }
+
                 var config = ConfigService.Instance;
-                StartClipboardWriteAfterSave(bitmap, filePath, config.ClipboardMode, config.PathFormat, config.ShowNotification, operationId, isCompositeCapture: true);
+                StartClipboardWriteAfterSave(bitmap, filePath, config.ClipboardMode, config.PathFormat, config.MarkdownHtmlCopyMode, config.ShowNotification, operationId, isCompositeCapture: true);
 
                 stopwatch.Stop();
                 LogService.LogInfo("capture.composite.completed", $"elapsedMs={stopwatch.ElapsedMilliseconds}", operationId, "capture.done");
@@ -264,11 +280,12 @@ namespace PathSnip
             string filePath,
             ClipboardMode clipboardMode,
             string pathFormat,
+            string markdownHtmlCopyMode,
             bool showNotification,
             string operationId,
             bool isCompositeCapture)
         {
-            _ = WriteClipboardAfterSaveAsync(bitmap, filePath, clipboardMode, pathFormat, showNotification, operationId, isCompositeCapture);
+            _ = WriteClipboardAfterSaveAsync(bitmap, filePath, clipboardMode, pathFormat, markdownHtmlCopyMode, showNotification, operationId, isCompositeCapture);
         }
 
         private async Task WriteClipboardAfterSaveAsync(
@@ -276,6 +293,7 @@ namespace PathSnip
             string filePath,
             ClipboardMode clipboardMode,
             string pathFormat,
+            string markdownHtmlCopyMode,
             bool showNotification,
             string operationId,
             bool isCompositeCapture)
@@ -298,14 +316,14 @@ namespace PathSnip
                         stage = "clipboard.image";
                         break;
                     case ClipboardMode.ImageAndPath:
-                        var formattedPathForImageAndPath = ClipboardService.FormatPath(filePath, pathFormat);
-                        copied = await ClipboardService.TrySetImageAndPathAsync(bitmap, formattedPathForImageAndPath, operationId);
+                        var plainPathForImageAndPath = GetPlainPath(filePath);
+                        copied = await ClipboardService.TrySetImageAndPathAsync(bitmap, plainPathForImageAndPath, operationId);
                         successMessage = "已保存，图片和路径已复制";
                         failedMessage = "复制图片和路径失败（文件已保存，可能被其他程序占用）";
                         stage = "clipboard.image_path";
                         break;
                     default:
-                        var formattedPath = ClipboardService.FormatPath(filePath, pathFormat);
+                        var formattedPath = ClipboardService.FormatPath(filePath, pathFormat, markdownHtmlCopyMode);
                         copied = await ClipboardService.TrySetTextAsync(formattedPath, operationId);
                         successMessage = "已保存，路径已复制";
                         failedMessage = "复制路径失败（文件已保存，可能被其他程序占用）";
@@ -334,6 +352,7 @@ namespace PathSnip
                     bitmap,
                     filePath,
                     pathFormat,
+                    markdownHtmlCopyMode,
                     operationId,
                     stage);
                 if (uiFallbackCopied)
@@ -358,6 +377,7 @@ namespace PathSnip
                         bitmap,
                         filePath,
                         pathFormat,
+                        markdownHtmlCopyMode,
                         operationId,
                         "clipboard.image_path.partial_image");
 
@@ -414,6 +434,7 @@ namespace PathSnip
             System.Windows.Media.Imaging.BitmapSource bitmap,
             string filePath,
             string pathFormat,
+            string markdownHtmlCopyMode,
             string operationId,
             string stage)
         {
@@ -422,7 +443,7 @@ namespace PathSnip
             for (int attempt = 0; attempt <= retryDelays.Length; attempt++)
             {
                 bool copied = await Dispatcher.InvokeAsync(() =>
-                    TryClipboardWriteOnUiThread(clipboardMode, bitmap, filePath, pathFormat, operationId));
+                    TryClipboardWriteOnUiThread(clipboardMode, bitmap, filePath, pathFormat, markdownHtmlCopyMode, operationId));
 
                 if (copied)
                 {
@@ -465,6 +486,7 @@ namespace PathSnip
             System.Windows.Media.Imaging.BitmapSource bitmap,
             string filePath,
             string pathFormat,
+            string markdownHtmlCopyMode,
             string operationId)
         {
             switch (clipboardMode)
@@ -474,12 +496,271 @@ namespace PathSnip
                 case ClipboardMode.ImageAndPath:
                     return ClipboardService.TrySetImageAndPathOnCurrentThreadOnce(
                         bitmap,
-                        ClipboardService.FormatPath(filePath, pathFormat),
+                        GetPlainPath(filePath),
                         operationId);
                 default:
                     return ClipboardService.TrySetTextOnCurrentThreadOnce(
-                        ClipboardService.FormatPath(filePath, pathFormat),
+                        ClipboardService.FormatPath(filePath, pathFormat, markdownHtmlCopyMode),
                         operationId);
+            }
+        }
+
+        private static string GetPlainPath(string path)
+        {
+            if (string.IsNullOrWhiteSpace(path))
+            {
+                return path ?? string.Empty;
+            }
+
+            try
+            {
+                return Path.GetFullPath(path);
+            }
+            catch
+            {
+                return path;
+            }
+        }
+
+        private void TrayMenu_Opened(object sender, RoutedEventArgs e)
+        {
+            try
+            {
+                RefreshTrayMenuState();
+            }
+            catch (Exception ex)
+            {
+                LogService.LogException("tray.menu.opened.failed", ex, "刷新托盘菜单状态失败", stage: "tray.menu");
+            }
+        }
+
+        private void RefreshTrayMenuState()
+        {
+            var contextMenu = (ContextMenu)Resources["TrayMenu"];
+            var config = ConfigService.Instance;
+
+            UpdateMenuHotkeyText();
+
+            bool hasRecent = TryGetLastSavedPath(out _);
+            var recentMenu = FindMenuItemByTag(contextMenu, "Recent");
+            if (recentMenu != null)
+            {
+                recentMenu.IsEnabled = hasRecent;
+            }
+
+            SetMenuItemEnabled(contextMenu, "RecentCopyImage", hasRecent);
+            SetMenuItemEnabled(contextMenu, "RecentCopyPath", hasRecent);
+            SetMenuItemEnabled(contextMenu, "RecentOpenFile", hasRecent);
+            SetMenuItemEnabled(contextMenu, "RecentLocate", hasRecent);
+
+            var clipboardModeMenu = FindMenuItemByTag(contextMenu, "ClipboardMode");
+            if (clipboardModeMenu != null)
+            {
+                foreach (var item in clipboardModeMenu.Items)
+                {
+                    if (item is MenuItem menuItem)
+                    {
+                        menuItem.IsChecked = string.Equals(menuItem.Tag?.ToString(), config.ClipboardMode.ToString(), StringComparison.Ordinal);
+                    }
+                }
+            }
+
+            var pathFormatMenu = FindMenuItemByTag(contextMenu, "PathFormat");
+            if (pathFormatMenu != null)
+            {
+                var currentPathFormat = string.IsNullOrWhiteSpace(config.PathFormat) ? "Text" : config.PathFormat;
+                foreach (var item in pathFormatMenu.Items)
+                {
+                    if (item is MenuItem menuItem)
+                    {
+                        menuItem.IsChecked = string.Equals(menuItem.Tag?.ToString(), currentPathFormat, StringComparison.Ordinal);
+                    }
+                }
+            }
+        }
+
+        private static void SetMenuItemEnabled(ContextMenu menu, string tag, bool isEnabled)
+        {
+            var item = FindMenuItemByTag(menu, tag);
+            if (item != null)
+            {
+                item.IsEnabled = isEnabled;
+            }
+        }
+
+        private static MenuItem FindMenuItemByTag(ItemsControl parent, string tag)
+        {
+            foreach (var item in parent.Items)
+            {
+                if (item is MenuItem menuItem)
+                {
+                    if (string.Equals(menuItem.Tag?.ToString(), tag, StringComparison.Ordinal))
+                    {
+                        return menuItem;
+                    }
+
+                    var nested = FindMenuItemByTag(menuItem, tag);
+                    if (nested != null)
+                    {
+                        return nested;
+                    }
+                }
+            }
+
+            return null;
+        }
+
+        private bool TryGetLastSavedPath(out string filePath)
+        {
+            filePath = _lastSavedPath;
+            return !string.IsNullOrWhiteSpace(filePath) && File.Exists(filePath);
+        }
+
+        private static BitmapSource LoadBitmapFromFile(string filePath)
+        {
+            using (var stream = new FileStream(filePath, FileMode.Open, FileAccess.Read, FileShare.Read))
+            {
+                var bitmap = new BitmapImage();
+                bitmap.BeginInit();
+                bitmap.CacheOption = BitmapCacheOption.OnLoad;
+                bitmap.StreamSource = stream;
+                bitmap.EndInit();
+                bitmap.Freeze();
+                return bitmap;
+            }
+        }
+
+        private async void MenuItem_RecentCopyImage_Click(object sender, RoutedEventArgs e)
+        {
+            try
+            {
+                if (!TryGetLastSavedPath(out var filePath))
+                {
+                    return;
+                }
+
+                var bitmap = LoadBitmapFromFile(filePath);
+                await ClipboardService.TrySetImageAsync(bitmap);
+            }
+            catch (Exception ex)
+            {
+                LogService.LogException("tray.recent.copy_image.failed", ex, "复制最近一次图片失败", stage: "tray.recent");
+            }
+        }
+
+        private async void MenuItem_RecentCopyPath_Click(object sender, RoutedEventArgs e)
+        {
+            try
+            {
+                if (!TryGetLastSavedPath(out var filePath))
+                {
+                    return;
+                }
+
+                var config = ConfigService.Instance;
+                var currentPathFormat = string.IsNullOrWhiteSpace(config.PathFormat) ? "Text" : config.PathFormat;
+                var formattedPath = ClipboardService.FormatPath(filePath, currentPathFormat, config.MarkdownHtmlCopyMode);
+                await ClipboardService.TrySetTextAsync(formattedPath);
+            }
+            catch (Exception ex)
+            {
+                LogService.LogException("tray.recent.copy_path.failed", ex, "复制最近一次路径失败", stage: "tray.recent");
+            }
+        }
+
+        private void MenuItem_RecentOpenFile_Click(object sender, RoutedEventArgs e)
+        {
+            try
+            {
+                if (!TryGetLastSavedPath(out var filePath))
+                {
+                    return;
+                }
+
+                Process.Start(new ProcessStartInfo
+                {
+                    FileName = filePath,
+                    UseShellExecute = true
+                });
+            }
+            catch (Exception ex)
+            {
+                LogService.LogException("tray.recent.open_file.failed", ex, "打开最近一次文件失败", stage: "tray.recent");
+            }
+        }
+
+        private void MenuItem_RecentLocate_Click(object sender, RoutedEventArgs e)
+        {
+            try
+            {
+                if (!TryGetLastSavedPath(out var filePath))
+                {
+                    return;
+                }
+
+                Process.Start("explorer.exe", $"/select,\"{filePath}\"");
+            }
+            catch (Exception ex)
+            {
+                LogService.LogException("tray.recent.locate.failed", ex, "定位最近一次文件失败", stage: "tray.recent");
+            }
+        }
+
+        private void MenuItem_ClipboardMode_Click(object sender, RoutedEventArgs e)
+        {
+            try
+            {
+                if (!(sender is MenuItem menuItem))
+                {
+                    return;
+                }
+
+                var config = ConfigService.Instance;
+                switch (menuItem.Tag?.ToString())
+                {
+                    case "ImageOnly":
+                        config.ClipboardMode = ClipboardMode.ImageOnly;
+                        break;
+                    case "ImageAndPath":
+                        config.ClipboardMode = ClipboardMode.ImageAndPath;
+                        break;
+                    default:
+                        config.ClipboardMode = ClipboardMode.PathOnly;
+                        break;
+                }
+
+                config.Save();
+                RefreshTrayMenuState();
+            }
+            catch (Exception ex)
+            {
+                LogService.LogException("tray.clipboard_mode.change.failed", ex, "切换剪贴板模式失败", stage: "tray.menu");
+            }
+        }
+
+        private void MenuItem_PathFormat_Click(object sender, RoutedEventArgs e)
+        {
+            try
+            {
+                if (!(sender is MenuItem menuItem))
+                {
+                    return;
+                }
+
+                var pathFormat = menuItem.Tag?.ToString();
+                if (string.IsNullOrWhiteSpace(pathFormat))
+                {
+                    return;
+                }
+
+                var config = ConfigService.Instance;
+                config.PathFormat = pathFormat;
+                config.Save();
+                RefreshTrayMenuState();
+            }
+            catch (Exception ex)
+            {
+                LogService.LogException("tray.path_format.change.failed", ex, "切换路径格式失败", stage: "tray.menu");
             }
         }
 
