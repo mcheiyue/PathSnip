@@ -262,18 +262,24 @@
                                 </Border>
                             </Popup>
                         </Grid>
-                        <ControlTemplate.Triggers>
-                            <Trigger Property="IsMouseOver" Value="True">
-                                <Setter TargetName="Border" Property="BorderBrush" Value="#9CA3AF"/>
-                            </Trigger>
-                            <Trigger Property="IsDropDownOpen" Value="True">
-                                <Setter TargetName="Border" Property="BorderBrush" Value="#2563EB"/>
-                            </Trigger>
-                        </ControlTemplate.Triggers>
-                    </ControlTemplate>
-                </Setter.Value>
-            </Setter>
-        </Style>
+                         <ControlTemplate.Triggers>
+                             <Trigger Property="IsMouseOver" Value="True">
+                                 <Setter TargetName="Border" Property="BorderBrush" Value="#9CA3AF"/>
+                             </Trigger>
+                             <Trigger Property="IsDropDownOpen" Value="True">
+                                 <Setter TargetName="Border" Property="BorderBrush" Value="#2563EB"/>
+                             </Trigger>
+                             <Trigger Property="IsEnabled" Value="False">
+                                 <Setter TargetName="Border" Property="Background" Value="#F3F4F6"/>
+                                 <Setter TargetName="Border" Property="BorderBrush" Value="#E5E7EB"/>
+                                 <Setter TargetName="Border" Property="Opacity" Value="0.65"/>
+                                 <Setter TargetName="Arrow" Property="Fill" Value="#9CA3AF"/>
+                             </Trigger>
+                         </ControlTemplate.Triggers>
+                     </ControlTemplate>
+                 </Setter.Value>
+             </Setter>
+         </Style>
         
         <Style TargetType="CheckBox">
             <Setter Property="FontSize" Value="13"/>
