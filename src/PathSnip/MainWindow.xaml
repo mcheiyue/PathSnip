@@ -13,7 +13,14 @@
 
             <MenuItem Header="最近一次" Tag="Recent">
                 <MenuItem Header="复制最近一次图片" Tag="RecentCopyImage" Click="MenuItem_RecentCopyImage_Click" />
-                <MenuItem Header="复制最近一次路径" Tag="RecentCopyPath" Click="MenuItem_RecentCopyPath_Click" />
+                <MenuItem Header="复制最近一次路径" Tag="RecentCopyPath">
+                    <MenuItem Header="按当前设置复制" Tag="RecentCopyPathCurrent" Click="MenuItem_RecentCopyPath_Click" />
+                    <MenuItem Header="输出格式" Tag="RecentCopyPathOutputFormat">
+                        <MenuItem Header="纯文本" Tag="Text" Click="MenuItem_RecentCopyPathWithFormat_Click" />
+                        <MenuItem Header="Markdown" Tag="Markdown" Click="MenuItem_RecentCopyPathWithFormat_Click" />
+                        <MenuItem Header="HTML" Tag="HTML" Click="MenuItem_RecentCopyPathWithFormat_Click" />
+                    </MenuItem>
+                </MenuItem>
                 <MenuItem Header="打开文件" Tag="RecentOpenFile" Click="MenuItem_RecentOpenFile_Click" />
                 <MenuItem Header="在资源管理器中定位" Tag="RecentLocate" Click="MenuItem_RecentLocate_Click" />
             </MenuItem>

@@ -668,6 +668,48 @@ namespace PathSnip
             }
         }
 
+        private async void MenuItem_RecentCopyPathWithFormat_Click(object sender, RoutedEventArgs e)
+        {
+            try
+            {
+                if (!(sender is MenuItem menuItem))
+                {
+                    return;
+                }
+
+                var format = menuItem.Tag?.ToString();
+                if (string.IsNullOrWhiteSpace(format))
+                {
+                    return;
+                }
+
+                if (!TryGetLastSavedPath(out var filePath))
+                {
+                    return;
+                }
+
+                string text;
+                if (string.Equals(format, "Text", StringComparison.Ordinal))
+                {
+                    text = GetPlainPath(filePath);
+                }
+                else if (string.Equals(format, "Markdown", StringComparison.Ordinal) || string.Equals(format, "HTML", StringComparison.Ordinal))
+                {
+                    text = ClipboardService.FormatPath(filePath, format, "SnippetOnly");
+                }
+                else
+                {
+                    text = GetPlainPath(filePath);
+                }
+
+                await ClipboardService.TrySetTextAsync(text);
+            }
+            catch (Exception ex)
+            {
+                LogService.LogException("tray.recent.copy_path_with_format.failed", ex, "按指定格式复制最近一次路径失败", stage: "tray.recent");
+            }
+        }
+
         private void MenuItem_RecentOpenFile_Click(object sender, RoutedEventArgs e)
         {
             try
