@@ -103,16 +103,26 @@ namespace PathSnip
 
         private void ClipboardModeComboBox_SelectionChanged(object sender, System.Windows.Controls.SelectionChangedEventArgs e)
         {
+            if (_isInitializing) return;
             UpdateClipboardSettingsUiState();
         }
 
         private void PathFormatComboBox_SelectionChanged(object sender, System.Windows.Controls.SelectionChangedEventArgs e)
         {
+            if (_isInitializing) return;
             UpdateClipboardSettingsUiState();
         }
 
         private void UpdateClipboardSettingsUiState()
         {
+            if (ClipboardModeComboBox == null
+                || PathFormatComboBox == null
+                || MarkdownHtmlCopyModeComboBox == null
+                || ClipboardPathFormatHintTextBlock == null)
+            {
+                return;
+            }
+
             var clipboardModeSelectedItem = ClipboardModeComboBox.SelectedItem as System.Windows.Controls.ComboBoxItem;
             var clipboardModeTag = clipboardModeSelectedItem?.Tag as string ?? clipboardModeSelectedItem?.Tag?.ToString();
             if (string.IsNullOrWhiteSpace(clipboardModeTag))
