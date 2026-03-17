@@ -4,7 +4,7 @@
   <p>Screenshot & Path Management Tool for Developers</p>
   <p><a href="README.md">简体中文</a> | <a href="README_EN.md">English</a></p>
   <p>
-    <img src="https://img.shields.io/badge/version-v1.1.7-brightgreen" alt="Version v1.1.7">
+    <img src="https://img.shields.io/badge/version-v1.2.0-brightgreen" alt="Version v1.2.0">
     <img src="https://img.shields.io/badge/.NET-Framework_4.8-blue" alt=".NET Framework 4.8">
     <img src="https://img.shields.io/badge/platform-Windows_10%2F11-blue" alt="Windows 10/11">
     <img src="https://img.shields.io/badge/license-GPL--3.0-blue" alt="License GPL-3.0">
@@ -22,6 +22,7 @@ PathSnip is a desktop screenshot tool that emphasizes **smart snapping, magnifie
 - **Smart Snap Engine**: Supports multiple modes (Auto/WindowOnly/ElementPreferred/ManualOnly), and you can hold Alt to temporarily bypass snapping.
 - **Magnifier & Color Picker**: Provides pixel-level zoom during capture; press `C` to copy the color value.
 - **Pinned Image**: After capturing, you can pin the image as a floating reference; supports dragging, mouse-wheel zoom, opacity adjustment, and double-click to close.
+- **Selection Interaction**: After locking the selection, you can drag inside to pan it without selecting any annotation tool (this only changes the crop region and does not move existing annotations/mosaic).
 - **Clipboard Mode**: Supports PathOnly/ImageOnly/ImageAndPath, and you can configure the path format.
 - **Filename Template**: Supports multiple time and GUID placeholders for consistent naming.
 - **Tray Resident**: Trigger via global hotkeys and manage via tray menu; supports opening settings/folder and exiting.
@@ -42,6 +43,8 @@ PathSnip is a desktop screenshot tool that emphasizes **smart snapping, magnifie
 |------|------|
 | `Ctrl+Shift+A` | Global screenshot hotkey (configurable in Settings) |
 | `Esc` | Cancel capture |
+| `Enter` | Overlay: Save and exit (does not steal focus when TextBox is active) |
+| `Ctrl+Z` | Overlay: Undo last annotation (does not steal focus when TextBox is active) |
 | `Tab` / `Shift+Tab` | Cycle through candidates/controls |
 | `T` | Pin image (Pinned Image) |
 | `C` | Copy current color value |
@@ -97,8 +100,11 @@ PathSnip is a desktop screenshot tool that emphasizes **smart snapping, magnifie
 - Release notes: Create a tag to trigger `release.yml`; artifacts are located at `bin/Release/net48/PathSnip.exe`.
 - Release Notes are automatically extracted from `CHANGELOG.md`.
 
-## Change Summary (v1.0.0 → v1.1.7)
+## Change Summary (v1.0.0 → v1.2.0)
 
+- **v1.2.0**: Add `Enter` to save and `Ctrl+Z` to undo in Overlay; fix focus loss after text annotation that could break hotkeys.
+- **v1.1.9**: Drag to pan the selection without switching tools; stability and performance improvements for high-frequency usage.
+- **v1.1.8**: Stability and UX refinements for fast pointer movement; build/documentation entry improvements.
 - **v1.1.7**: Region-level smart snapping engine (UIA/MSAA/region profiling/stabilizer/mode gating/quick-move fallback).
 - **v1.1.3**: Pinned image feature (T key, PinnedImageWindow, drag/zoom/opacity). Magnifier rendering and caching optimizations.
 - **v1.1.2**: Pixel-level magnifier + color picker (`C` to copy).
