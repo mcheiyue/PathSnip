@@ -299,6 +299,8 @@ namespace PathSnip
 
                 // 解除 WPF 鼠标锁定状态
                 AnnotationCanvas.ReleaseMouseCapture();
+
+                RestoreOverlayKeyboardFocus();
                 return;
             }
 
@@ -311,6 +313,8 @@ namespace PathSnip
                 _currentTool = AnnotationTool.None;
                 UpdateToolbarSelection();
                 UpdateMoveSelectionThumbState();
+
+                RestoreOverlayKeyboardFocus();
                 return;
             }
 
@@ -318,6 +322,8 @@ namespace PathSnip
             if (_selectionCompleted)
             {
                 ResetToSelectingState();
+
+                RestoreOverlayKeyboardFocus();
                 return;
             }
 
@@ -325,11 +331,37 @@ namespace PathSnip
             if (_hasStartedSelection)
             {
                 ResetToInitialState();
+
+                RestoreOverlayKeyboardFocus();
                 return;
             }
 
             // 第四级：从未开始选区，直接退出
             CaptureCancelled?.Invoke();
+        }
+
+        private void RestoreOverlayKeyboardFocus()
+        {
+            if (Keyboard.FocusedElement is TextBoxBase)
+            {
+                return;
+            }
+
+            Focus();
+            Keyboard.Focus(this);
+
+            if (SelectionCanvas == null)
+            {
+                return;
+            }
+
+            if (!SelectionCanvas.Focusable)
+            {
+                SelectionCanvas.Focusable = true;
+            }
+
+            SelectionCanvas.Focus();
+            Keyboard.Focus(SelectionCanvas);
         }
 
         private void ResetToSelectingState()
@@ -446,7 +478,15 @@ namespace PathSnip
 
         private void OnMouseLeftButtonDown(object sender, MouseButtonEventArgs e)
         {
-            if (_selectionCompleted) return;
+            if (_selectionCompleted)
+            {
+                if (!(Keyboard.FocusedElement is TextBoxBase))
+                {
+                    RestoreOverlayKeyboardFocus();
+                }
+
+                return;
+            }
 
             StopElementSnapUpgrade();
 
@@ -1667,9 +1707,20 @@ namespace PathSnip
 
         private async void Window_KeyDown(object sender, KeyEventArgs e)
         {
+            Key key = e.Key;
+            Key imeProcessedKey = e.ImeProcessedKey;
+
+            if (key == Key.ImeProcessed
+                && imeProcessedKey == Key.Escape
+                && !(Keyboard.FocusedElement is TextBoxBase))
+            {
+                key = Key.Escape;
+                imeProcessedKey = Key.None;
+            }
+
             OverlayShortcutAction action = _shortcutHandler.ResolveKeyDown(
-                e.Key,
-                e.ImeProcessedKey,
+                key,
+                imeProcessedKey,
                 CanHandlePinShortcut(),
                 CanHandleColorCopyShortcut(),
                 CanHandleCycleShortcut(),

@@ -117,10 +117,20 @@ namespace PathSnip.Tools
 
         private void TextBox_KeyDown(object sender, KeyEventArgs e)
         {
-            if (e.Key == Key.Enter)
+            if (!IsConfirmKey(e.Key, e.ImeProcessedKey))
             {
-                Keyboard.ClearFocus();
+                return;
             }
+
+            e.Handled = true;
+            ConfirmInput();
+        }
+
+        private static bool IsConfirmKey(Key key, Key imeProcessedKey)
+        {
+            return key == Key.Enter
+                || key == Key.Return
+                || (key == Key.ImeProcessed && (imeProcessedKey == Key.Enter || imeProcessedKey == Key.Return));
         }
 
         /// <summary>
@@ -144,6 +154,7 @@ namespace PathSnip.Tools
             if (string.IsNullOrWhiteSpace(text))
             {
                 _currentTextBox = null;
+                FocusAnnotationCanvas();
                 return;
             }
 
@@ -172,6 +183,25 @@ namespace PathSnip.Tools
 
             _currentTextBox = null;
             _currentTextBlock = null;
+
+            FocusAnnotationCanvas();
+        }
+
+        private void FocusAnnotationCanvas()
+        {
+            var canvas = _context?.AnnotationCanvas;
+            if (canvas == null)
+            {
+                return;
+            }
+
+            if (!canvas.Focusable)
+            {
+                canvas.Focusable = true;
+            }
+
+            canvas.Focus();
+            Keyboard.Focus(canvas);
         }
     }
 }
