@@ -27,6 +27,7 @@ namespace PathSnip.Services
         public bool ShowNotification { get; set; } = true;
         public ClipboardMode ClipboardMode { get; set; } = ClipboardMode.PathOnly;
         public string PathFormat { get; set; } = "Text";
+        public string MarkdownHtmlCopyMode { get; set; } = "SnippetOnly";
         public string FileNameTemplate { get; set; } = "{yyyy}-{MM}-{dd}_{HHmmss}";
         public bool EnableSmartSnap { get; set; } = true;
         public SmartSnapMode SmartSnapMode { get; set; } = SmartSnapMode.Auto;
@@ -51,6 +52,7 @@ namespace PathSnip.Services
         public bool ShowNotification { get; set; }
         public ClipboardMode ClipboardMode { get; set; }
         public string PathFormat { get; set; }
+        public string MarkdownHtmlCopyMode { get; set; }
         public string FileNameTemplate { get; set; }
         public bool EnableSmartSnap { get; set; }
         public SmartSnapMode SmartSnapMode { get; set; }
@@ -104,6 +106,7 @@ namespace PathSnip.Services
             ShowNotification = _config.ShowNotification;
             ClipboardMode = _config.ClipboardMode;
             PathFormat = string.IsNullOrEmpty(_config.PathFormat) ? "Text" : _config.PathFormat;
+            MarkdownHtmlCopyMode = string.IsNullOrEmpty(_config.MarkdownHtmlCopyMode) ? "SnippetOnly" : _config.MarkdownHtmlCopyMode;
             FileNameTemplate = string.IsNullOrEmpty(_config.FileNameTemplate) ? "{yyyy}-{MM}-{dd}_{HHmmss}" : _config.FileNameTemplate;
             EnableSmartSnap = _config.EnableSmartSnap;
             SmartSnapMode = _config.SmartSnapMode;
@@ -121,6 +124,7 @@ namespace PathSnip.Services
                 _config.ShowNotification = ShowNotification;
                 _config.ClipboardMode = ClipboardMode;
                 _config.PathFormat = PathFormat;
+                _config.MarkdownHtmlCopyMode = MarkdownHtmlCopyMode;
                 _config.FileNameTemplate = FileNameTemplate;
                 _config.EnableSmartSnap = EnableSmartSnap;
                 _config.SmartSnapMode = SmartSnapMode;

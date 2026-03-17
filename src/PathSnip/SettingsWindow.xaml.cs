@@ -62,6 +62,19 @@ namespace PathSnip
                     break;
             }
 
+            switch (config.MarkdownHtmlCopyMode)
+            {
+                case "PlainPathOnly":
+                    MarkdownHtmlCopyModeComboBox.SelectedIndex = 1;
+                    break;
+                case "SnippetAndPlainPath":
+                    MarkdownHtmlCopyModeComboBox.SelectedIndex = 2;
+                    break;
+                default:
+                    MarkdownHtmlCopyModeComboBox.SelectedIndex = 0;
+                    break;
+            }
+
             // 文件名模板
             FileNameTemplateTextBox.Text = config.FileNameTemplate;
 
@@ -194,6 +207,7 @@ namespace PathSnip
             ShowNotificationCheckBox.IsChecked = true;
             ClipboardModeComboBox.SelectedIndex = 0;  // 仅路径
             PathFormatComboBox.SelectedIndex = 0;      // 纯文本
+            MarkdownHtmlCopyModeComboBox.SelectedIndex = 0;
             FileNameTemplateTextBox.Text = "{yyyy}-{MM}-{dd}_{HHmmss}";
             EnableSmartSnapCheckBox.IsChecked = true;
             SmartSnapModeComboBox.SelectedIndex = 0;
@@ -316,6 +330,14 @@ namespace PathSnip
                     pathFormatTag = "Text";
                 }
                 config.PathFormat = pathFormatTag;
+
+                var markdownHtmlCopyModeSelectedItem = MarkdownHtmlCopyModeComboBox.SelectedItem as System.Windows.Controls.ComboBoxItem;
+                var markdownHtmlCopyModeTag = markdownHtmlCopyModeSelectedItem?.Tag as string ?? markdownHtmlCopyModeSelectedItem?.Tag?.ToString();
+                if (string.IsNullOrWhiteSpace(markdownHtmlCopyModeTag))
+                {
+                    markdownHtmlCopyModeTag = "SnippetOnly";
+                }
+                config.MarkdownHtmlCopyMode = markdownHtmlCopyModeTag;
 
                 // 保存文件名模板
                 config.FileNameTemplate = template;

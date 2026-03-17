@@ -2,6 +2,7 @@ using System;
 using System.Collections.Concurrent;
 using System.Diagnostics;
 using System.IO;
+using System.Net;
 using System.Threading;
 using System.Threading.Tasks;
 using System.Windows;
@@ -543,17 +544,73 @@ namespace PathSnip.Services
             return ex.HResult == ClipboardCantOpenHResult;
         }
 
-        public static string FormatPath(string path, string format)
+        public static string FormatPath(string path, string format, string markdownHtmlCopyMode)
         {
-            var normalizedPath = path.Replace("\\", "/");
+            if (string.IsNullOrWhiteSpace(path))
+            {
+                return path ?? string.Empty;
+            }
+
+            string fullPath;
+            try
+            {
+                fullPath = Path.GetFullPath(path);
+            }
+            catch
+            {
+                fullPath = path;
+            }
+
             switch (format)
             {
                 case "Markdown":
-                    return $"![截图]({normalizedPath})";
+                {
+                    string snippet;
+                    try
+                    {
+                        var fileUri = new Uri(fullPath).AbsoluteUri;
+                        snippet = $"![截图](<{fileUri}>)";
+                    }
+                    catch
+                    {
+                        var normalizedPath = fullPath.Replace("\\", "/");
+                        snippet = $"![截图]({normalizedPath})";
+                    }
+                    return ApplyMarkdownHtmlCopyMode(snippet, fullPath, markdownHtmlCopyMode);
+                }
                 case "HTML":
-                    return $"<img src=\"file:///{normalizedPath}\"/>";
+                {
+                    string snippet;
+                    try
+                    {
+                        var fileUri = new Uri(fullPath).AbsoluteUri;
+                        var safeUri = WebUtility.HtmlEncode(fileUri);
+                        snippet = $"<img src=\"{safeUri}\"/>";
+                    }
+                    catch
+                    {
+                        var normalizedPath = fullPath.Replace("\\", "/");
+                        var safePath = WebUtility.HtmlEncode(normalizedPath);
+                        snippet = $"<img src=\"file:///{safePath}\"/>";
+                    }
+                    return ApplyMarkdownHtmlCopyMode(snippet, fullPath, markdownHtmlCopyMode);
+                }
                 default:
                     return path;
+            }
+        }
+
+        private static string ApplyMarkdownHtmlCopyMode(string snippet, string plainPath, string markdownHtmlCopyMode)
+        {
+            switch (markdownHtmlCopyMode)
+            {
+                case "PlainPathOnly":
+                    return plainPath;
+                case "SnippetAndPlainPath":
+                    return $"{snippet}{Environment.NewLine}{plainPath}";
+                case "SnippetOnly":
+                default:
+                    return snippet;
             }
         }
     }

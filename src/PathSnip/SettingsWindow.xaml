@@ -413,17 +413,19 @@
                     </Grid>
                 </GroupBox>
                 
-                <GroupBox Header="剪贴板设置" Tag="&#xE77F;">
-                    <Grid>
-                        <Grid.RowDefinitions>
-                            <RowDefinition Height="Auto"/>
-                            <RowDefinition Height="14"/>
-                            <RowDefinition Height="Auto"/>
-                        </Grid.RowDefinitions>
-                        <Grid.ColumnDefinitions>
-                            <ColumnDefinition Width="120"/>
-                            <ColumnDefinition Width="*"/>
-                        </Grid.ColumnDefinitions>
+                 <GroupBox Header="剪贴板设置" Tag="&#xE77F;">
+                     <Grid>
+                         <Grid.RowDefinitions>
+                             <RowDefinition Height="Auto"/>
+                             <RowDefinition Height="14"/>
+                             <RowDefinition Height="Auto"/>
+                             <RowDefinition Height="14"/>
+                             <RowDefinition Height="Auto"/>
+                         </Grid.RowDefinitions>
+                         <Grid.ColumnDefinitions>
+                             <ColumnDefinition Width="120"/>
+                             <ColumnDefinition Width="*"/>
+                         </Grid.ColumnDefinitions>
                         
                         <TextBlock Grid.Row="0" Grid.Column="0" Text="剪贴板模式：" VerticalAlignment="Center" TextAlignment="Right" Margin="0,0,12,0" Foreground="#4B5563"/>
                         <ComboBox Grid.Row="0" Grid.Column="1" x:Name="ClipboardModeComboBox" SelectedIndex="0">
@@ -432,14 +434,21 @@
                             <ComboBoxItem Content="图片 + 路径" Tag="ImageAndPath"/>
                         </ComboBox>
                         
-                        <TextBlock Grid.Row="2" Grid.Column="0" Text="路径格式：" VerticalAlignment="Center" TextAlignment="Right" Margin="0,0,12,0" Foreground="#4B5563"/>
-                        <ComboBox Grid.Row="2" Grid.Column="1" x:Name="PathFormatComboBox" SelectedIndex="0">
-                            <ComboBoxItem Content="纯文本 (D:\path\image.png)" Tag="Text"/>
-                            <ComboBoxItem Content="Markdown (![image](...))" Tag="Markdown"/>
-                            <ComboBoxItem Content="HTML (&lt;img src=&quot;...&quot;/&gt;)" Tag="HTML"/>
-                        </ComboBox>
-                    </Grid>
-                </GroupBox>
+                         <TextBlock Grid.Row="2" Grid.Column="0" Text="路径格式：" VerticalAlignment="Center" TextAlignment="Right" Margin="0,0,12,0" Foreground="#4B5563"/>
+                         <ComboBox Grid.Row="2" Grid.Column="1" x:Name="PathFormatComboBox" SelectedIndex="0">
+                             <ComboBoxItem Content="纯文本 (D:\path\image.png)" Tag="Text"/>
+                             <ComboBoxItem Content="Markdown (![image](...))" Tag="Markdown"/>
+                             <ComboBoxItem Content="HTML (&lt;img src=&quot;...&quot;/&gt;)" Tag="HTML"/>
+                         </ComboBox>
+
+                         <TextBlock Grid.Row="4" Grid.Column="0" Text="Markdown/HTML 输出：" VerticalAlignment="Center" TextAlignment="Right" Margin="0,0,12,0" Foreground="#4B5563"/>
+                         <ComboBox Grid.Row="4" Grid.Column="1" x:Name="MarkdownHtmlCopyModeComboBox" SelectedIndex="0">
+                             <ComboBoxItem Content="仅链接片段（默认）" Tag="SnippetOnly"/>
+                             <ComboBoxItem Content="纯路径（Windows 路径）" Tag="PlainPathOnly"/>
+                             <ComboBoxItem Content="链接片段 + 纯路径" Tag="SnippetAndPlainPath"/>
+                         </ComboBox>
+                     </Grid>
+                 </GroupBox>
 
                 <GroupBox Header="智能吸附" Tag="&#xE7B3;">
                     <Grid>
