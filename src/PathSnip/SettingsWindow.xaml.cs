@@ -97,6 +97,73 @@ namespace PathSnip
                     SmartSnapModeComboBox.SelectedIndex = 0;
                     break;
             }
+
+            UpdateClipboardSettingsUiState();
+        }
+
+        private void ClipboardModeComboBox_SelectionChanged(object sender, System.Windows.Controls.SelectionChangedEventArgs e)
+        {
+            UpdateClipboardSettingsUiState();
+        }
+
+        private void PathFormatComboBox_SelectionChanged(object sender, System.Windows.Controls.SelectionChangedEventArgs e)
+        {
+            UpdateClipboardSettingsUiState();
+        }
+
+        private void UpdateClipboardSettingsUiState()
+        {
+            var clipboardModeSelectedItem = ClipboardModeComboBox.SelectedItem as System.Windows.Controls.ComboBoxItem;
+            var clipboardModeTag = clipboardModeSelectedItem?.Tag as string ?? clipboardModeSelectedItem?.Tag?.ToString();
+            if (string.IsNullOrWhiteSpace(clipboardModeTag))
+            {
+                clipboardModeTag = "PathOnly";
+            }
+
+            bool isPathOnly = string.Equals(clipboardModeTag, "PathOnly", StringComparison.Ordinal);
+
+            string hintText = null;
+            bool showHint = false;
+
+            if (!isPathOnly)
+            {
+                PathFormatComboBox.IsEnabled = false;
+                MarkdownHtmlCopyModeComboBox.IsEnabled = false;
+
+                showHint = true;
+                if (string.Equals(clipboardModeTag, "ImageOnly", StringComparison.Ordinal))
+                {
+                    hintText = "仅图片模式不会复制路径；如需调整路径格式，请切换到仅路径";
+                }
+                else
+                {
+                    hintText = "图片+路径模式下随图路径固定为纯文本；如需调整路径格式，请切换到仅路径";
+                }
+            }
+            else
+            {
+                PathFormatComboBox.IsEnabled = true;
+
+                var pathFormatSelectedItem = PathFormatComboBox.SelectedItem as System.Windows.Controls.ComboBoxItem;
+                var pathFormatTag = pathFormatSelectedItem?.Tag as string ?? pathFormatSelectedItem?.Tag?.ToString();
+                if (string.IsNullOrWhiteSpace(pathFormatTag))
+                {
+                    pathFormatTag = "Text";
+                }
+
+                bool isMarkdownOrHtml = string.Equals(pathFormatTag, "Markdown", StringComparison.Ordinal)
+                    || string.Equals(pathFormatTag, "HTML", StringComparison.Ordinal);
+                MarkdownHtmlCopyModeComboBox.IsEnabled = isMarkdownOrHtml;
+
+                if (!isMarkdownOrHtml)
+                {
+                    showHint = true;
+                    hintText = "“Markdown/HTML 输出”仅对路径格式为 Markdown/HTML 时生效";
+                }
+            }
+
+            ClipboardPathFormatHintTextBlock.Text = hintText ?? string.Empty;
+            ClipboardPathFormatHintTextBlock.Visibility = showHint ? Visibility.Visible : Visibility.Collapsed;
         }
 
         private void HotkeyTextBox_PreviewKeyDown(object sender, System.Windows.Input.KeyEventArgs e)
@@ -213,6 +280,8 @@ namespace PathSnip
             SmartSnapModeComboBox.SelectedIndex = 0;
             EnableElementSnapCheckBox.IsChecked = true;
             HoldAltToBypassSnapCheckBox.IsChecked = true;
+
+            UpdateClipboardSettingsUiState();
 
             System.Windows.MessageBox.Show("设置已重置为默认值，请点击\"保存设置\"生效。", "PathSnip", MessageBoxButton.OK, MessageBoxImage.Information);
         }
