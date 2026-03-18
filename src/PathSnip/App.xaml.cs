@@ -40,7 +40,7 @@ namespace PathSnip
 
             _hotkeyService = new HotkeyService();
             var registerSuccess = _hotkeyService.Register(modifiers, key, OnHotkeyPressed);
-            _mainWindow.SetHotkeyService(_hotkeyService);
+            _mainWindow.SetHotkeyService(_hotkeyService, registerSuccess, config.HotkeyModifiers, config.HotkeyKey);
 
             if (!registerSuccess)
             {

@@ -18,6 +18,9 @@ namespace PathSnip
         private static readonly int[] UiFallbackImageAndPathRetryDelaysMs = { 120, 250, 500, 1000, 2000 };
         private CaptureOverlayWindow _captureWindow;
         private HotkeyService _hotkeyService;
+        private bool _hasRegisteredHotkey;
+        private string _registeredHotkeyModifiers;
+        private string _registeredHotkeyKey;
         private bool _isCapturing;
         private int _lastCaptureRequestTick = -1;
         private string _lastSavedPath;
@@ -93,11 +96,27 @@ namespace PathSnip
             }
         }
 
-        public void UpdateHotkey(string modifiersStr, string keyStr)
+        public bool UpdateHotkey(string modifiersStr, string keyStr)
         {
             try
             {
-                _hotkeyService?.Unregister();
+                if (_hotkeyService == null)
+                {
+                    LogService.LogWarn("hotkey.update.no_service", "HotkeyService is null", stage: "hotkey.update");
+                    return false;
+                }
+
+                bool canRollback = _hasRegisteredHotkey
+                    && !string.IsNullOrWhiteSpace(_registeredHotkeyModifiers)
+                    && !string.IsNullOrWhiteSpace(_registeredHotkeyKey);
+                var rollbackModifiersStr = _registeredHotkeyModifiers;
+                var rollbackKeyStr = _registeredHotkeyKey;
+
+                if (_hasRegisteredHotkey)
+                {
+                    _hotkeyService.Unregister();
+                    _hasRegisteredHotkey = false;
+                }
 
                 var modifiers = ParseModifiers(modifiersStr);
                 var key = (Key)Enum.Parse(typeof(Key), keyStr);
@@ -107,28 +126,57 @@ namespace PathSnip
                 {
                     TrayIcon.ShowBalloonTip("PathSnip", $"热键 {modifiersStr}+{keyStr} 注册失败，可能已被占用，请在设置中更换。", Hardcodet.Wpf.TaskbarNotification.BalloonIcon.Warning);
                     LogService.LogWarn("hotkey.update.register_failed", $"热键注册失败: {modifiersStr}+{keyStr}", stage: "hotkey.update");
-                    return;
+
+                    if (canRollback)
+                    {
+                        var rollbackModifiers = ParseModifiers(rollbackModifiersStr);
+                        var rollbackKey = (Key)Enum.Parse(typeof(Key), rollbackKeyStr);
+                        var rollbackSuccess = _hotkeyService.Register(rollbackModifiers, rollbackKey, OnHotkeyPressed);
+                        if (rollbackSuccess)
+                        {
+                            _hasRegisteredHotkey = true;
+                            _registeredHotkeyModifiers = rollbackModifiersStr;
+                            _registeredHotkeyKey = rollbackKeyStr;
+                            UpdateMenuHotkeyText(rollbackModifiersStr, rollbackKeyStr);
+                            LogService.LogInfo("hotkey.update.rollback_success", $"热键已回滚: {rollbackModifiersStr}+{rollbackKeyStr}", stage: "hotkey.update");
+                        }
+                        else
+                        {
+                            TrayIcon.ShowBalloonTip("PathSnip", $"热键 {rollbackModifiersStr}+{rollbackKeyStr} 回滚失败，请在设置中重新设置。", Hardcodet.Wpf.TaskbarNotification.BalloonIcon.Error);
+                            LogService.LogWarn("hotkey.update.rollback_failed", $"热键回滚失败: {rollbackModifiersStr}+{rollbackKeyStr}", stage: "hotkey.update");
+                        }
+                    }
+
+                    return false;
                 }
 
+                _hasRegisteredHotkey = true;
+                _registeredHotkeyModifiers = modifiersStr;
+                _registeredHotkeyKey = keyStr;
+
                 // 更新菜单显示的快捷键
-                UpdateMenuHotkeyText();
+                UpdateMenuHotkeyText(modifiersStr, keyStr);
 
                 LogService.LogInfo("hotkey.update.success", $"热键已更新: {modifiersStr}+{keyStr}", stage: "hotkey.update");
+                return true;
             }
             catch (Exception ex)
             {
                 LogService.LogException("hotkey.update.failed", ex, "更新热键失败", stage: "hotkey.update");
+                return false;
             }
         }
 
-        public void UpdateMenuHotkeyText()
+        public void UpdateMenuHotkeyText(string modifiersOverride = null, string keyOverride = null)
         {
             var config = ConfigService.Instance;
+            var modifiers = string.IsNullOrWhiteSpace(modifiersOverride) ? config.HotkeyModifiers : modifiersOverride;
+            var key = string.IsNullOrWhiteSpace(keyOverride) ? config.HotkeyKey : keyOverride;
             var contextMenu = (ContextMenu)Resources["TrayMenu"];
             var captureItem = FindMenuItemByTag(contextMenu, "Capture");
             if (captureItem != null)
             {
-                captureItem.Header = $"截图 ({config.HotkeyModifiers}+{config.HotkeyKey})";
+                captureItem.Header = $"截图 ({modifiers}+{key})";
             }
         }
 
@@ -157,9 +205,16 @@ namespace PathSnip
             return modifiers;
         }
 
-        public void SetHotkeyService(HotkeyService service)
+        public void SetHotkeyService(HotkeyService service, bool isRegistered, string registeredModifiers, string registeredKey)
         {
             _hotkeyService = service;
+
+            _hasRegisteredHotkey = isRegistered;
+            if (isRegistered)
+            {
+                _registeredHotkeyModifiers = registeredModifiers;
+                _registeredHotkeyKey = registeredKey;
+            }
         }
 
         public void ShowTrayNotification(string message, Hardcodet.Wpf.TaskbarNotification.BalloonIcon icon)

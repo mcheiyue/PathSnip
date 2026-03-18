@@ -373,9 +373,9 @@
                         </Grid.ColumnDefinitions>
                         
                         <TextBlock Grid.Row="0" Grid.Column="0" Text="截图快捷键：" VerticalAlignment="Center" TextAlignment="Right" Margin="0,0,12,0" Foreground="#4B5563"/>
-                        <TextBox Grid.Row="0" Grid.Column="1" x:Name="HotkeyTextBox" 
-                                 PreviewKeyDown="HotkeyTextBox_PreviewKeyDown"
-                                 GotFocus="HotkeyTextBox_GotFocus"/>
+                         <TextBox Grid.Row="0" Grid.Column="1" x:Name="HotkeyTextBox" 
+                                  PreviewKeyDown="HotkeyTextBox_PreviewKeyDown"
+                                  GotFocus="HotkeyTextBox_GotFocus"/>
                                  
                         <Border Grid.Row="1" Grid.Column="1" Background="#F8FAFC" BorderBrush="#E2E8F0" BorderThickness="1" CornerRadius="4" Padding="8,6" Margin="0,6,0,0">
                             <StackPanel Orientation="Horizontal">
@@ -401,14 +401,14 @@
                         </Grid.ColumnDefinitions>
                         
                         <TextBlock Grid.Row="0" Grid.Column="0" Text="保存目录：" VerticalAlignment="Center" TextAlignment="Right" Margin="0,0,12,0" Foreground="#4B5563"/>
-                        <TextBox Grid.Row="0" Grid.Column="1" x:Name="SaveDirectoryTextBox"/>
+                         <TextBox Grid.Row="0" Grid.Column="1" x:Name="SaveDirectoryTextBox" TextChanged="SaveDirectoryTextBox_TextChanged"/>
                         <Button Grid.Row="0" Grid.Column="2" Content="浏览" 
                                 Style="{StaticResource OutlineButton}"
                                 Margin="8,0,0,0" Padding="16,0"
                                 Click="BrowseButton_Click"/>
                         
                         <TextBlock Grid.Row="2" Grid.Column="0" Text="文件名格式：" VerticalAlignment="Center" TextAlignment="Right" Margin="0,0,12,0" Foreground="#4B5563"/>
-                        <TextBox Grid.Row="2" Grid.Column="1" Grid.ColumnSpan="2" x:Name="FileNameTemplateTextBox"/>
+                         <TextBox Grid.Row="2" Grid.Column="1" Grid.ColumnSpan="2" x:Name="FileNameTemplateTextBox" TextChanged="FileNameTemplateTextBox_TextChanged"/>
                         
                         <Border Grid.Row="3" Grid.Column="1" Grid.ColumnSpan="2" Background="#F8FAFC" BorderBrush="#E2E8F0" BorderThickness="1" CornerRadius="4" Padding="8,6" Margin="0,6,0,0">
                             <StackPanel Orientation="Horizontal">
@@ -449,7 +449,7 @@
                           </ComboBox>
 
                          <TextBlock Grid.Row="4" Grid.Column="0" Text="Markdown/HTML 输出：" VerticalAlignment="Center" TextAlignment="Right" Margin="0,0,12,0" Foreground="#4B5563"/>
-                         <ComboBox Grid.Row="4" Grid.Column="1" x:Name="MarkdownHtmlCopyModeComboBox" SelectedIndex="0">
+                          <ComboBox Grid.Row="4" Grid.Column="1" x:Name="MarkdownHtmlCopyModeComboBox" SelectedIndex="0" SelectionChanged="MarkdownHtmlCopyModeComboBox_SelectionChanged">
                              <ComboBoxItem Content="仅链接片段（默认）" Tag="SnippetOnly"/>
                              <ComboBoxItem Content="纯路径（Windows 路径）" Tag="PlainPathOnly"/>
                              <ComboBoxItem Content="链接片段 + 纯路径" Tag="SnippetAndPlainPath"/>
@@ -477,25 +477,31 @@
                             <ColumnDefinition Width="*"/>
                         </Grid.ColumnDefinitions>
 
-                        <CheckBox Grid.Row="0" Grid.Column="1" x:Name="EnableSmartSnapCheckBox"
-                                  Content="启用智能吸附"
-                                  Style="{StaticResource ToggleSwitchStyle}"/>
+                         <CheckBox Grid.Row="0" Grid.Column="1" x:Name="EnableSmartSnapCheckBox"
+                                   Content="启用智能吸附"
+                                   Style="{StaticResource ToggleSwitchStyle}"
+                                   Checked="EnableSmartSnapCheckBox_Changed"
+                                   Unchecked="EnableSmartSnapCheckBox_Changed"/>
 
                         <TextBlock Grid.Row="2" Grid.Column="0" Text="吸附模式：" VerticalAlignment="Center" TextAlignment="Right" Margin="0,0,12,0" Foreground="#4B5563"/>
-                        <ComboBox Grid.Row="2" Grid.Column="1" x:Name="SmartSnapModeComboBox" SelectedIndex="0">
+                         <ComboBox Grid.Row="2" Grid.Column="1" x:Name="SmartSnapModeComboBox" SelectedIndex="0" SelectionChanged="SmartSnapModeComboBox_SelectionChanged">
                             <ComboBoxItem Content="自动（推荐）" Tag="Auto"/>
                             <ComboBoxItem Content="仅窗口" Tag="WindowOnly"/>
                             <ComboBoxItem Content="优先元素" Tag="ElementPreferred"/>
                             <ComboBoxItem Content="仅手动框选" Tag="ManualOnly"/>
                         </ComboBox>
 
-                        <CheckBox Grid.Row="4" Grid.Column="1" x:Name="EnableElementSnapCheckBox"
-                                  Content="启用元素级吸附"
-                                  Style="{StaticResource ToggleSwitchStyle}"/>
+                         <CheckBox Grid.Row="4" Grid.Column="1" x:Name="EnableElementSnapCheckBox"
+                                   Content="启用元素级吸附"
+                                   Style="{StaticResource ToggleSwitchStyle}"
+                                   Checked="EnableElementSnapCheckBox_Changed"
+                                   Unchecked="EnableElementSnapCheckBox_Changed"/>
 
-                        <CheckBox Grid.Row="6" Grid.Column="1" x:Name="HoldAltToBypassSnapCheckBox"
-                                  Content="按住 Alt 临时绕过吸附"
-                                  Style="{StaticResource ToggleSwitchStyle}"/>
+                         <CheckBox Grid.Row="6" Grid.Column="1" x:Name="HoldAltToBypassSnapCheckBox"
+                                   Content="按住 Alt 临时绕过吸附"
+                                   Style="{StaticResource ToggleSwitchStyle}"
+                                   Checked="HoldAltToBypassSnapCheckBox_Changed"
+                                   Unchecked="HoldAltToBypassSnapCheckBox_Changed"/>
                     </Grid>
                 </GroupBox>
                  
@@ -511,11 +517,11 @@
                             <ColumnDefinition Width="*"/>
                         </Grid.ColumnDefinitions>
                         
-                        <CheckBox Grid.Row="0" Grid.Column="1" x:Name="StartWithWindowsCheckBox" 
-                                  Content="开机自动启动"
-                                  Style="{StaticResource ToggleSwitchStyle}"
-                                  Checked="StartWithWindows_Changed"
-                                  Unchecked="StartWithWindows_Changed"/>
+                         <CheckBox Grid.Row="0" Grid.Column="1" x:Name="StartWithWindowsCheckBox" 
+                                   Content="开机自动启动"
+                                   Style="{StaticResource ToggleSwitchStyle}"
+                                   Checked="StartWithWindowsCheckBox_Changed"
+                                   Unchecked="StartWithWindowsCheckBox_Changed"/>
                         
                         <CheckBox Grid.Row="2" Grid.Column="1" x:Name="ShowNotificationCheckBox" 
                                   Content="截图后显示通知"

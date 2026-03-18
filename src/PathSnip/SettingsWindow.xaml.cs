@@ -11,6 +11,8 @@ namespace PathSnip
     {
         private bool _isInitializing = true;
 
+        private DirtyFlags _dirty = new DirtyFlags();
+
         public SettingsWindow()
         {
             InitializeComponent();
@@ -99,18 +101,30 @@ namespace PathSnip
             }
 
             UpdateClipboardSettingsUiState();
+
+            UpdateSmartSnapSettingsUiState();
+
+            _dirty = new DirtyFlags();
         }
 
         private void ClipboardModeComboBox_SelectionChanged(object sender, System.Windows.Controls.SelectionChangedEventArgs e)
         {
             if (_isInitializing) return;
+            _dirty.ClipboardMode = true;
             UpdateClipboardSettingsUiState();
         }
 
         private void PathFormatComboBox_SelectionChanged(object sender, System.Windows.Controls.SelectionChangedEventArgs e)
         {
             if (_isInitializing) return;
+            _dirty.PathFormat = true;
             UpdateClipboardSettingsUiState();
+        }
+
+        private void MarkdownHtmlCopyModeComboBox_SelectionChanged(object sender, System.Windows.Controls.SelectionChangedEventArgs e)
+        {
+            if (_isInitializing) return;
+            _dirty.MarkdownHtmlCopyMode = true;
         }
 
         private void UpdateClipboardSettingsUiState()
@@ -204,6 +218,8 @@ namespace PathSnip
 
             HotkeyTextBox.Text = $"{modifierStr}+{keyStr}";
             HotkeyHint.Text = "✓ 快捷键已设置";
+
+            _dirty.Hotkey = true;
         }
 
         private void HotkeyTextBox_GotFocus(object sender, RoutedEventArgs e)
@@ -258,12 +274,71 @@ namespace PathSnip
             }
         }
 
-        private void StartWithWindows_Changed(object sender, RoutedEventArgs e)
+        private void StartWithWindowsCheckBox_Changed(object sender, RoutedEventArgs e)
         {
             if (_isInitializing) return;
 
-            var enabled = StartWithWindowsCheckBox.IsChecked == true;
-            StartWithWindowsHelper.SetEnabled(enabled);
+            _dirty.StartWithWindows = true;
+        }
+
+        private void SaveDirectoryTextBox_TextChanged(object sender, System.Windows.Controls.TextChangedEventArgs e)
+        {
+            if (_isInitializing) return;
+            _dirty.SaveDirectory = true;
+        }
+
+        private void FileNameTemplateTextBox_TextChanged(object sender, System.Windows.Controls.TextChangedEventArgs e)
+        {
+            if (_isInitializing) return;
+            _dirty.FileNameTemplate = true;
+        }
+
+        private void ShowNotification_Changed(object sender, RoutedEventArgs e)
+        {
+            if (_isInitializing) return;
+            _dirty.ShowNotification = true;
+        }
+
+        private void EnableSmartSnapCheckBox_Changed(object sender, RoutedEventArgs e)
+        {
+            if (_isInitializing) return;
+
+            _dirty.EnableSmartSnap = true;
+            UpdateSmartSnapSettingsUiState();
+        }
+
+        private void SmartSnapModeComboBox_SelectionChanged(object sender, System.Windows.Controls.SelectionChangedEventArgs e)
+        {
+            if (_isInitializing) return;
+            _dirty.SmartSnapMode = true;
+        }
+
+        private void EnableElementSnapCheckBox_Changed(object sender, RoutedEventArgs e)
+        {
+            if (_isInitializing) return;
+            _dirty.EnableElementSnap = true;
+        }
+
+        private void HoldAltToBypassSnapCheckBox_Changed(object sender, RoutedEventArgs e)
+        {
+            if (_isInitializing) return;
+            _dirty.HoldAltToBypassSnap = true;
+        }
+
+        private void UpdateSmartSnapSettingsUiState()
+        {
+            if (EnableSmartSnapCheckBox == null
+                || SmartSnapModeComboBox == null
+                || EnableElementSnapCheckBox == null
+                || HoldAltToBypassSnapCheckBox == null)
+            {
+                return;
+            }
+
+            bool isEnabled = EnableSmartSnapCheckBox.IsChecked == true;
+            SmartSnapModeComboBox.IsEnabled = isEnabled;
+            EnableElementSnapCheckBox.IsEnabled = isEnabled;
+            HoldAltToBypassSnapCheckBox.IsEnabled = isEnabled;
         }
 
         private void ResetButton_Click(object sender, RoutedEventArgs e)
@@ -279,7 +354,7 @@ namespace PathSnip
 
             // 重置为默认值
             HotkeyTextBox.Text = "Ctrl+Shift+A";
-            SaveDirectoryTextBox.Text = Environment.GetFolderPath(Environment.SpecialFolder.MyPictures);
+            SaveDirectoryTextBox.Text = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.MyPictures), "PathSnip");
             StartWithWindowsCheckBox.IsChecked = false;
             ShowNotificationCheckBox.IsChecked = true;
             ClipboardModeComboBox.SelectedIndex = 0;  // 仅路径
@@ -292,13 +367,9 @@ namespace PathSnip
             HoldAltToBypassSnapCheckBox.IsChecked = true;
 
             UpdateClipboardSettingsUiState();
+            UpdateSmartSnapSettingsUiState();
 
             System.Windows.MessageBox.Show("设置已重置为默认值，请点击\"保存设置\"生效。", "PathSnip", MessageBoxButton.OK, MessageBoxImage.Information);
-        }
-
-        private void ShowNotification_Changed(object sender, RoutedEventArgs e)
-        {
-            // 实时保存会在Button_Click 中处理 Save
         }
 
         private void SaveButton_Click(object sender, RoutedEventArgs e)
@@ -318,7 +389,7 @@ namespace PathSnip
 
                 // 验证快捷键
                 var hotkeyText = HotkeyTextBox.Text;
-                if (string.IsNullOrWhiteSpace(hotkeyText) || !hotkeyText.Contains("+"))
+                if (_dirty.Hotkey && (string.IsNullOrWhiteSpace(hotkeyText) || !hotkeyText.Contains("+")))
                 {
                     System.Windows.MessageBox.Show("快捷键格式错误。", "PathSnip", MessageBoxButton.OK, MessageBoxImage.Warning);
                     HotkeyTextBox.Focus();
@@ -355,101 +426,181 @@ namespace PathSnip
                 }
 
                 // ========== 第二步：验证通过后，再修改内存并保存 ==========
-                
+                 
                 var config = ConfigService.Instance;
 
-                // 保存快捷键
-                var parts = hotkeyText.Split('+');
-                if (parts.Length >= 2)
+                bool configChanged = false;
+                bool hotkeyUpdateFailed = false;
+
+                if (_dirty.StartWithWindows)
                 {
-                    var modifiersStr = string.Join("+", parts, 0, parts.Length - 1);
-                    var keyStr = parts[parts.Length - 1];
+                    var startWithWindowsEnabled = StartWithWindowsCheckBox.IsChecked == true;
+                    StartWithWindowsHelper.SetEnabled(startWithWindowsEnabled);
+                }
 
-                    config.HotkeyModifiers = modifiersStr;
-                    config.HotkeyKey = keyStr;
-
-                    // 通知主窗口更新热键
-                    if (HotkeyChanged != null)
+                // 保存快捷键
+                if (_dirty.Hotkey)
+                {
+                    var parts = hotkeyText.Split('+');
+                    if (parts.Length >= 2)
                     {
-                        HotkeyChanged(modifiersStr, keyStr);
+                        var modifiersStr = string.Join("+", parts, 0, parts.Length - 1);
+                        var keyStr = parts[parts.Length - 1];
+
+                        bool updateSuccess = HotkeyChanged?.Invoke(modifiersStr, keyStr) ?? true;
+                        if (updateSuccess)
+                        {
+                            config.HotkeyModifiers = modifiersStr;
+                            config.HotkeyKey = keyStr;
+                            configChanged = true;
+                            _dirty.Hotkey = false;
+                        }
+                        else
+                        {
+                            hotkeyUpdateFailed = true;
+                        }
                     }
                 }
 
                 // 保存目录
-                config.SaveDirectory = saveDirectory;
+                if (_dirty.SaveDirectory)
+                {
+                    config.SaveDirectory = saveDirectory;
+                    configChanged = true;
+                    _dirty.SaveDirectory = false;
+                }
 
                 // 保存通知设置
-                config.ShowNotification = ShowNotificationCheckBox.IsChecked == true;
+                if (_dirty.ShowNotification)
+                {
+                    config.ShowNotification = ShowNotificationCheckBox.IsChecked == true;
+                    configChanged = true;
+                    _dirty.ShowNotification = false;
+                }
 
                 // 保存剪贴板模式
-                var clipboardModeSelectedItem = ClipboardModeComboBox.SelectedItem as System.Windows.Controls.ComboBoxItem;
-                var clipboardModeTag = clipboardModeSelectedItem?.Tag as string ?? clipboardModeSelectedItem?.Tag?.ToString();
-                if (string.IsNullOrWhiteSpace(clipboardModeTag))
+                if (_dirty.ClipboardMode)
                 {
-                    clipboardModeTag = "PathOnly";
-                }
-                switch (clipboardModeTag)
-                {
-                    case "ImageOnly":
-                        config.ClipboardMode = ClipboardMode.ImageOnly;
-                        break;
-                    case "ImageAndPath":
-                        config.ClipboardMode = ClipboardMode.ImageAndPath;
-                        break;
-                    default:
-                        config.ClipboardMode = ClipboardMode.PathOnly;
-                        break;
+                    var clipboardModeSelectedItem = ClipboardModeComboBox.SelectedItem as System.Windows.Controls.ComboBoxItem;
+                    var clipboardModeTag = clipboardModeSelectedItem?.Tag as string ?? clipboardModeSelectedItem?.Tag?.ToString();
+                    if (string.IsNullOrWhiteSpace(clipboardModeTag))
+                    {
+                        clipboardModeTag = "PathOnly";
+                    }
+                    switch (clipboardModeTag)
+                    {
+                        case "ImageOnly":
+                            config.ClipboardMode = ClipboardMode.ImageOnly;
+                            break;
+                        case "ImageAndPath":
+                            config.ClipboardMode = ClipboardMode.ImageAndPath;
+                            break;
+                        default:
+                            config.ClipboardMode = ClipboardMode.PathOnly;
+                            break;
+                    }
+
+                    configChanged = true;
+                    _dirty.ClipboardMode = false;
                 }
 
                 // 保存路径格式
-                var pathFormatSelectedItem = PathFormatComboBox.SelectedItem as System.Windows.Controls.ComboBoxItem;
-                var pathFormatTag = pathFormatSelectedItem?.Tag as string ?? pathFormatSelectedItem?.Tag?.ToString();
-                if (string.IsNullOrWhiteSpace(pathFormatTag))
+                if (_dirty.PathFormat)
                 {
-                    pathFormatTag = "Text";
+                    var pathFormatSelectedItem = PathFormatComboBox.SelectedItem as System.Windows.Controls.ComboBoxItem;
+                    var pathFormatTag = pathFormatSelectedItem?.Tag as string ?? pathFormatSelectedItem?.Tag?.ToString();
+                    if (string.IsNullOrWhiteSpace(pathFormatTag))
+                    {
+                        pathFormatTag = "Text";
+                    }
+                    config.PathFormat = pathFormatTag;
+                    configChanged = true;
+                    _dirty.PathFormat = false;
                 }
-                config.PathFormat = pathFormatTag;
 
-                var markdownHtmlCopyModeSelectedItem = MarkdownHtmlCopyModeComboBox.SelectedItem as System.Windows.Controls.ComboBoxItem;
-                var markdownHtmlCopyModeTag = markdownHtmlCopyModeSelectedItem?.Tag as string ?? markdownHtmlCopyModeSelectedItem?.Tag?.ToString();
-                if (string.IsNullOrWhiteSpace(markdownHtmlCopyModeTag))
+                if (_dirty.MarkdownHtmlCopyMode)
                 {
-                    markdownHtmlCopyModeTag = "SnippetOnly";
+                    var markdownHtmlCopyModeSelectedItem = MarkdownHtmlCopyModeComboBox.SelectedItem as System.Windows.Controls.ComboBoxItem;
+                    var markdownHtmlCopyModeTag = markdownHtmlCopyModeSelectedItem?.Tag as string ?? markdownHtmlCopyModeSelectedItem?.Tag?.ToString();
+                    if (string.IsNullOrWhiteSpace(markdownHtmlCopyModeTag))
+                    {
+                        markdownHtmlCopyModeTag = "SnippetOnly";
+                    }
+                    config.MarkdownHtmlCopyMode = markdownHtmlCopyModeTag;
+                    configChanged = true;
+                    _dirty.MarkdownHtmlCopyMode = false;
                 }
-                config.MarkdownHtmlCopyMode = markdownHtmlCopyModeTag;
 
                 // 保存文件名模板
-                config.FileNameTemplate = template;
-
-                config.EnableSmartSnap = EnableSmartSnapCheckBox.IsChecked == true;
-                config.EnableElementSnap = EnableElementSnapCheckBox.IsChecked == true;
-                config.HoldAltToBypassSnap = HoldAltToBypassSnapCheckBox.IsChecked == true;
-
-                var snapModeSelectedItem = SmartSnapModeComboBox.SelectedItem as System.Windows.Controls.ComboBoxItem;
-                var snapModeTag = snapModeSelectedItem?.Tag as string ?? snapModeSelectedItem?.Tag?.ToString();
-                if (string.IsNullOrWhiteSpace(snapModeTag))
+                if (_dirty.FileNameTemplate)
                 {
-                    snapModeTag = "Auto";
-                }
-                switch (snapModeTag)
-                {
-                    case "WindowOnly":
-                        config.SmartSnapMode = SmartSnapMode.WindowOnly;
-                        break;
-                    case "ElementPreferred":
-                        config.SmartSnapMode = SmartSnapMode.ElementPreferred;
-                        break;
-                    case "ManualOnly":
-                        config.SmartSnapMode = SmartSnapMode.ManualOnly;
-                        break;
-                    default:
-                        config.SmartSnapMode = SmartSnapMode.Auto;
-                        break;
+                    config.FileNameTemplate = template;
+                    configChanged = true;
+                    _dirty.FileNameTemplate = false;
                 }
 
-                config.Save();
+                if (_dirty.EnableSmartSnap)
+                {
+                    config.EnableSmartSnap = EnableSmartSnapCheckBox.IsChecked == true;
+                    configChanged = true;
+                    _dirty.EnableSmartSnap = false;
+                }
 
-                System.Windows.MessageBox.Show("设置已保存", "PathSnip", MessageBoxButton.OK, MessageBoxImage.Information);
+                if (_dirty.EnableElementSnap)
+                {
+                    config.EnableElementSnap = EnableElementSnapCheckBox.IsChecked == true;
+                    configChanged = true;
+                    _dirty.EnableElementSnap = false;
+                }
+
+                if (_dirty.HoldAltToBypassSnap)
+                {
+                    config.HoldAltToBypassSnap = HoldAltToBypassSnapCheckBox.IsChecked == true;
+                    configChanged = true;
+                    _dirty.HoldAltToBypassSnap = false;
+                }
+
+                if (_dirty.SmartSnapMode)
+                {
+                    var snapModeSelectedItem = SmartSnapModeComboBox.SelectedItem as System.Windows.Controls.ComboBoxItem;
+                    var snapModeTag = snapModeSelectedItem?.Tag as string ?? snapModeSelectedItem?.Tag?.ToString();
+                    if (string.IsNullOrWhiteSpace(snapModeTag))
+                    {
+                        snapModeTag = "Auto";
+                    }
+                    switch (snapModeTag)
+                    {
+                        case "WindowOnly":
+                            config.SmartSnapMode = SmartSnapMode.WindowOnly;
+                            break;
+                        case "ElementPreferred":
+                            config.SmartSnapMode = SmartSnapMode.ElementPreferred;
+                            break;
+                        case "ManualOnly":
+                            config.SmartSnapMode = SmartSnapMode.ManualOnly;
+                            break;
+                        default:
+                            config.SmartSnapMode = SmartSnapMode.Auto;
+                            break;
+                    }
+
+                    configChanged = true;
+                    _dirty.SmartSnapMode = false;
+                }
+
+                if (configChanged)
+                {
+                    config.Save();
+                }
+
+                if (hotkeyUpdateFailed)
+                {
+                    System.Windows.MessageBox.Show("设置已保存，但热键更新失败（可能已被占用），已保留原热键且不会保存无效热键。", "PathSnip", MessageBoxButton.OK, MessageBoxImage.Warning);
+                }
+                else
+                {
+                    System.Windows.MessageBox.Show("设置已保存", "PathSnip", MessageBoxButton.OK, MessageBoxImage.Information);
+                }
                 // 不关闭窗口，让用户可以继续修改
             }
             catch (Exception ex)
@@ -458,6 +609,22 @@ namespace PathSnip
             }
         }
 
-        public event Action<string, string> HotkeyChanged;
+        public event Func<string, string, bool> HotkeyChanged;
+
+        private sealed class DirtyFlags
+        {
+            public bool Hotkey { get; set; }
+            public bool SaveDirectory { get; set; }
+            public bool StartWithWindows { get; set; }
+            public bool ShowNotification { get; set; }
+            public bool ClipboardMode { get; set; }
+            public bool PathFormat { get; set; }
+            public bool MarkdownHtmlCopyMode { get; set; }
+            public bool FileNameTemplate { get; set; }
+            public bool EnableSmartSnap { get; set; }
+            public bool SmartSnapMode { get; set; }
+            public bool EnableElementSnap { get; set; }
+            public bool HoldAltToBypassSnap { get; set; }
+        }
     }
 }
