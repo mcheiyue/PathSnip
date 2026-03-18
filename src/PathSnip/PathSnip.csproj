@@ -47,6 +47,7 @@
 
   <ItemGroup>
     <Compile Include="App.xaml.cs" />
+    <Compile Include="CaptureOverlayWindow.Annotation.cs" />
     <Compile Include="CaptureOverlayWindow.xaml.cs" />
     <Compile Include="Helpers\MagnifierHelper.cs" />
     <Compile Include="MainWindow.xaml.cs" />
