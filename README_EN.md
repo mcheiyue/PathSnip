@@ -4,7 +4,7 @@
   <p>Screenshot & Path Management Tool for Developers</p>
   <p><a href="README.md">简体中文</a> | <a href="README_EN.md">English</a></p>
   <p>
-    <img src="https://img.shields.io/badge/version-v1.2.1-brightgreen" alt="Version v1.2.1">
+    <img src="https://img.shields.io/badge/version-v1.2.2-brightgreen" alt="Version v1.2.2">
     <img src="https://img.shields.io/badge/.NET-Framework_4.8-blue" alt=".NET Framework 4.8">
     <img src="https://img.shields.io/badge/platform-Windows_10%2F11-blue" alt="Windows 10/11">
     <img src="https://img.shields.io/badge/license-GPL--3.0-blue" alt="License GPL-3.0">
@@ -85,7 +85,7 @@ PathSnip is a desktop screenshot tool that emphasizes **smart snapping, magnifie
 - Smart snapping: mode selection and element snapping toggle
 - Other options: clipboard mode, path format, filename template, auto-start, notifications
 
-> **Reset default reminder**: The “Reset to defaults” action in Settings will reset the save directory to the *Pictures library root*, which is different from the default configuration `Pictures\PathSnip`. Please confirm this difference during upgrade or migration.
+> **Reset default reminder**: The “Reset to defaults” action in Settings resets the save directory to the default `Pictures\PathSnip`, while keeping the rest of the settings on the usual “apply after Save Settings” semantics.
 
 ## Paths & Logs
 
@@ -101,8 +101,9 @@ PathSnip is a desktop screenshot tool that emphasizes **smart snapping, magnifie
 - Release notes: Create a tag to trigger `release.yml`; artifacts are located at `bin/Release/net48/PathSnip.exe`.
 - Release Notes are automatically extracted from `CHANGELOG.md`.
 
-## Change Summary (v1.0.0 → v1.2.1)
+## Change Summary (v1.0.0 → v1.2.2)
 
+- **v1.2.2**: Tighten settings save semantics and hotkey rollback reliability, and complete low-risk partial extractions for Overlay / MainWindow / SettingsWindow.
 - **v1.2.1**: Add “Recent” and quick toggles to tray menu; make Markdown/HTML path copy more robust; fix Settings crash and disabled-state visuals.
 - **v1.2.0**: Add `Enter` to save and `Ctrl+Z` to undo in Overlay; fix focus loss after text annotation that could break hotkeys.
 - **v1.1.9**: Drag to pan the selection without switching tools; stability and performance improvements for high-frequency usage.
@@ -117,7 +118,7 @@ PathSnip is a desktop screenshot tool that emphasizes **smart snapping, magnifie
 
 - It is recommended to back up `%APPDATA%\PathSnip\config.json` before upgrading.
 - Check whether the smart snapping mode and `HoldAltToBypassSnap` match your operating habits.
-- If you use “Reset to defaults”, the save directory will return to the Pictures library root. Please confirm in advance.
+- If you use “Reset to defaults”, the save directory will return to `Pictures\PathSnip`. Confirm in advance whether your existing save path needs migration.
 
 ## License
 

@@ -2,6 +2,27 @@
 
 All notable changes to this project will be documented in this file.
 
+## [v1.2.2] - 2026-03-19
+
+> **[SYS_MSG]** 收口设置保存语义并完善热键更新失败回滚，同时完成 Overlay / MainWindow / SettingsWindow 三处低风险 partial 解耦，降低后续维护成本。
+> **[METRICS]** Binary: 588KB | Startup: 223ms
+
+### 💻 终端与工作流
+* **[工作流]** 同步 README / README_EN 版本徽章、变更摘要与“重置默认”说明，确保发布文档与实际行为一致。
+
+### ✨ 新特性
+* （无）
+
+### 🐛 问题修复
+* `[UI]` **设置保存语义一致化** - “开机自启”改为点击“保存设置”后生效；重置默认保存目录回到 `Pictures\PathSnip`；智能吸附关闭时相关子选项置灰，减少“可选但不生效”的误解。
+* `[Core]` **热键更新失败回滚** - 新热键注册失败时保留旧热键可用，并阻止无效热键落盘，避免截图入口被错误配置直接打断。
+* `[UI]` **设置来源并发覆盖收口** - 避免设置窗口在打开期间，把托盘或并发设置窗口已保存的配置覆盖回旧值。
+
+### ⚙️ 优化与重构
+* `[Core]` **CaptureOverlayWindow 标注子域解耦** - 将标注工具与属性面板逻辑拆到 partial，保持主选区、吸附与保存链路不变。
+* `[Core]` **MainWindow 剪贴板收尾流程解耦** - 将保存后剪贴板写入与失败恢复链路拆到 partial，保留完成入口与 `_lastSavedPath` 时序。
+* `[UI]` **SettingsWindow 保存流解耦** - 将 `SaveButton_Click` 与相关保存事件拆到 partial，保留加载、重置、dirty 标记与 UI 联动在主文件。
+
 ## [v1.2.1] - 2026-03-18
 
 > **[SYS_MSG]** 增强 Markdown/HTML 路径复制的稳定性与输出策略，并将托盘菜单升级为“最近一次 + 快速切换”的效率入口；同时修复设置页打开崩溃与禁用态视觉不明显的问题。
