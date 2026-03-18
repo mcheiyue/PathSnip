@@ -50,6 +50,7 @@
     <Compile Include="CaptureOverlayWindow.Annotation.cs" />
     <Compile Include="CaptureOverlayWindow.xaml.cs" />
     <Compile Include="Helpers\MagnifierHelper.cs" />
+    <Compile Include="MainWindow.ClipboardFlow.cs" />
     <Compile Include="MainWindow.xaml.cs" />
     <Compile Include="PinnedImageWindow.xaml.cs" />
     <Compile Include="Services\ClipboardService.cs" />
