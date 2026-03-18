@@ -4,7 +4,7 @@
   <p>Screenshot & Path Management Tool for Developers</p>
   <p><a href="README.md">简体中文</a> | <a href="README_EN.md">English</a></p>
   <p>
-    <img src="https://img.shields.io/badge/version-v1.2.0-brightgreen" alt="Version v1.2.0">
+    <img src="https://img.shields.io/badge/version-v1.2.1-brightgreen" alt="Version v1.2.1">
     <img src="https://img.shields.io/badge/.NET-Framework_4.8-blue" alt=".NET Framework 4.8">
     <img src="https://img.shields.io/badge/platform-Windows_10%2F11-blue" alt="Windows 10/11">
     <img src="https://img.shields.io/badge/license-GPL--3.0-blue" alt="License GPL-3.0">
@@ -25,7 +25,7 @@ PathSnip is a desktop screenshot tool that emphasizes **smart snapping, magnifie
 - **Selection Interaction**: After locking the selection, you can drag inside to pan it without selecting any annotation tool (this only changes the crop region and does not move existing annotations/mosaic).
 - **Clipboard Mode**: Supports PathOnly/ImageOnly/ImageAndPath, and you can configure the path format.
 - **Filename Template**: Supports multiple time and GUID placeholders for consistent naming.
-- **Tray Resident**: Trigger via global hotkeys and manage via tray menu; supports opening settings/folder and exiting.
+- **Tray Resident**: Trigger via global hotkeys; tray menu includes recent capture actions and quick toggles (clipboard mode/path format), plus settings/folder/exit.
 
 ## Quick Start
 
@@ -68,8 +68,9 @@ PathSnip is a desktop screenshot tool that emphasizes **smart snapping, magnifie
 ### Clipboard & Path Format
 - Clipboard modes: `PathOnly` / `ImageOnly` / `ImageAndPath`
 - Path formats: `Text` / `Markdown` / `HTML`
-  - Markdown example: `![截图](C:\\Path\\to\\image.png)`
+  - Markdown example: `![Screenshot](<file:///C:/Path/to/image.png>)`
   - HTML example: `<img src="file:///C:/Path/to/image.png"/>`
+- Markdown/HTML copy mode: `SnippetOnly` / `PlainPathOnly` / `SnippetAndPlainPath` (effective only for Markdown/HTML formats)
 
 ### Filename Template
 - Default template: `{yyyy}-{MM}-{dd}_{HHmmss}`
@@ -100,8 +101,9 @@ PathSnip is a desktop screenshot tool that emphasizes **smart snapping, magnifie
 - Release notes: Create a tag to trigger `release.yml`; artifacts are located at `bin/Release/net48/PathSnip.exe`.
 - Release Notes are automatically extracted from `CHANGELOG.md`.
 
-## Change Summary (v1.0.0 → v1.2.0)
+## Change Summary (v1.0.0 → v1.2.1)
 
+- **v1.2.1**: Add “Recent” and quick toggles to tray menu; make Markdown/HTML path copy more robust; fix Settings crash and disabled-state visuals.
 - **v1.2.0**: Add `Enter` to save and `Ctrl+Z` to undo in Overlay; fix focus loss after text annotation that could break hotkeys.
 - **v1.1.9**: Drag to pan the selection without switching tools; stability and performance improvements for high-frequency usage.
 - **v1.1.8**: Stability and UX refinements for fast pointer movement; build/documentation entry improvements.
