@@ -79,6 +79,7 @@
     <Compile Include="Services\Snap\WindowSnapService.cs" />
     <Compile Include="Services\StartWithWindowsHelper.cs" />
     <Compile Include="Services\WindowDetectionService.cs" />
+    <Compile Include="SettingsWindow.SaveFlow.cs" />
     <Compile Include="SettingsWindow.xaml.cs" />
     <Compile Include="Tools\AnnotationToolContext.cs" />
     <Compile Include="Tools\AnnotationToolFactory.cs" />
